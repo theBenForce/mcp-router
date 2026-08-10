@@ -15,8 +15,9 @@ describe("Servers & Tools API", () => {
   });
 
   test("POST /api/servers creates a new server record", async () => {
+    const serverName = `test-server-${crypto.randomUUID().slice(0, 8)}`;
     const payload = {
-      name: "test-server",
+      name: serverName,
       description: "A test MCP server",
       transportType: "sse",
       config: { url: "http://localhost:8080/sse" },
@@ -34,7 +35,7 @@ describe("Servers & Tools API", () => {
     expect(res.status).toBe(201);
     const created = await res.json();
     expect(created.id).toBeDefined();
-    expect(created.name).toBe("test-server");
+    expect(created.name).toBe(serverName);
     expect(created.transport_type).toBe("sse");
   });
 
@@ -42,6 +43,7 @@ describe("Servers & Tools API", () => {
     // Verify the schema supports 'docker' transport type by inserting directly
     const rawDb = getRawDb();
     const serverId = crypto.randomUUID();
+    const serverName = `excalidraw-${serverId}`;
     const config = {
       image: "ghcr.io/yctimlin/mcp_excalidraw:latest",
       env: {
@@ -53,11 +55,11 @@ describe("Servers & Tools API", () => {
     rawDb.query(`
       INSERT INTO mcp_servers (id, name, description, transport_type, config_json, status)
       VALUES (?, ?, ?, 'docker', ?, 'disconnected')
-    `).run(serverId, "excalidraw", "Excalidraw MCP via Docker", JSON.stringify(config));
+    `).run(serverId, serverName, "Excalidraw MCP via Docker", JSON.stringify(config));
 
     const row = rawDb.query("SELECT * FROM mcp_servers WHERE id = ?").get(serverId) as any;
     expect(row).toBeDefined();
-    expect(row.name).toBe("excalidraw");
+    expect(row.name).toBe(serverName);
     expect(row.transport_type).toBe("docker");
 
     const parsedConfig = JSON.parse(row.config_json);

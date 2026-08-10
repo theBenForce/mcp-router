@@ -25,16 +25,18 @@ describe("Downstream MCP Proxy & Permission Filter", () => {
     // Insert server and tool using raw SQL for test setup
     const serverId = crypto.randomUUID();
     const toolId = crypto.randomUUID();
+    const serverName = `srv-a-${serverId.slice(0, 8)}`;
+    const namespacedName = `${serverName}__calc`;
 
     rawDb.query(`
       INSERT INTO mcp_servers (id, name, transport_type, config_json, status)
-      VALUES (?, 'srv-a', 'sse', '{}', 'connected')
-    `).run(serverId);
+      VALUES (?, ?, 'sse', '{}', 'connected')
+    `).run(serverId, serverName);
 
     rawDb.query(`
       INSERT INTO mcp_tools (id, server_id, name, namespaced_name, description, input_schema_json)
-      VALUES (?, ?, 'calc', 'srv-a__calc', 'Calculator tool', '{}')
-    `).run(toolId, serverId);
+      VALUES (?, ?, 'calc', ?, 'Calculator tool', '{}')
+    `).run(toolId, serverId, namespacedName);
 
     // Create API Key with permission to srv-a
     const key = keyService.createKey({
@@ -57,10 +59,24 @@ describe("Downstream MCP Proxy & Permission Filter", () => {
     const body = await res.json();
     expect(body.result).toBeDefined();
     expect(body.result.tools.length).toBe(1);
-    expect(body.result.tools[0].name).toBe("srv-a__calc");
+    expect(body.result.tools[0].name).toBe(namespacedName);
   });
 
   test("POST /mcp rejects tool call if permission is denied", async () => {
+    const rawDb = getRawDb();
+    const serverId = crypto.randomUUID();
+    const toolId = crypto.randomUUID();
+
+    rawDb.query(`
+      INSERT INTO mcp_servers (id, name, transport_type, config_json, status)
+      VALUES (?, 'srv-denied', 'sse', '{}', 'connected')
+    `).run(serverId);
+
+    rawDb.query(`
+      INSERT INTO mcp_tools (id, server_id, name, namespaced_name, description, input_schema_json)
+      VALUES (?, ?, 'calc', 'srv-denied__calc', 'Calculator tool', '{}')
+    `).run(toolId, serverId);
+
     // Key with NO permissions
     const keyNoPerm = keyService.createKey({ name: "Unprivileged Key" });
 
@@ -75,7 +91,7 @@ describe("Downstream MCP Proxy & Permission Filter", () => {
           jsonrpc: "2.0",
           id: 2,
           method: "tools/call",
-          params: { name: "srv-a__calc", arguments: {} },
+          params: { name: "srv-denied__calc", arguments: {} },
         }),
       })
     );

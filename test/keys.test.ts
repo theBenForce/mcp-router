@@ -33,10 +33,11 @@ describe("KeyService", () => {
 
     // Insert dummy server
     const serverId = crypto.randomUUID();
+    const serverName = `test-srv-${serverId}`;
     rawDb.query(`
       INSERT INTO mcp_servers (id, name, transport_type, config_json, status)
-      VALUES (?, 'test-srv', 'sse', '{}', 'connected')
-    `).run(serverId);
+      VALUES (?, ?, 'sse', '{}', 'connected')
+    `).run(serverId, serverName);
 
     const key = keyService.createKey({ name: "Perm Key" });
     keyService.setPermissions(key.id, {
