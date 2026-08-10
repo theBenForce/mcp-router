@@ -1,5 +1,7 @@
 import React from "react";
 import { Server, Key, Activity, Cpu, ShieldCheck, MessageSquare } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface SidebarProps {
   activeTab: "overview" | "servers" | "prompts" | "keys" | "audit";
@@ -44,12 +46,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
-              <button
+              <Button
                 key={item.id}
+                variant="ghost"
                 onClick={() => setActiveTab(item.id as any)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                className={`w-full justify-between px-3 py-2.5 h-auto text-sm font-medium transition-all duration-150 ${
                   isActive
-                    ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-sm"
+                    ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-sm hover:bg-indigo-600/20 hover:text-indigo-300"
                     : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
                 }`}
               >
@@ -58,11 +61,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>{item.label}</span>
                 </div>
                 {item.badge !== null && item.badge > 0 && (
-                  <span className="px-2 py-0.5 text-xs font-mono rounded-full bg-zinc-800 text-zinc-300">
+                  <Badge variant="secondary" className="font-mono text-xs font-normal">
                     {item.badge}
-                  </span>
+                  </Badge>
                 )}
-              </button>
+              </Button>
             );
           })}
         </nav>
