@@ -96,12 +96,32 @@ function pushSchema(db: Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS mcp_prompts (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      title TEXT,
+      description TEXT,
+      content_template TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS mcp_prompt_arguments (
+      id TEXT PRIMARY KEY,
+      prompt_id TEXT NOT NULL REFERENCES mcp_prompts(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT,
+      required INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(prompt_id, name)
+    );
+
     CREATE TABLE IF NOT EXISTS api_key_permissions (
       id TEXT PRIMARY KEY,
       api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
-      server_id TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+      server_id TEXT REFERENCES mcp_servers(id) ON DELETE CASCADE,
       tool_id TEXT REFERENCES mcp_tools(id) ON DELETE CASCADE,
-      UNIQUE(api_key_id, server_id, tool_id)
+      prompt_id TEXT REFERENCES mcp_prompts(id) ON DELETE CASCADE,
+      UNIQUE(api_key_id, server_id, tool_id, prompt_id)
     );
 
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -118,9 +138,41 @@ function pushSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_tools_server ON mcp_tools(server_id);
     CREATE INDEX IF NOT EXISTS idx_perms_key ON api_key_permissions(api_key_id);
     CREATE INDEX IF NOT EXISTS idx_perms_server ON api_key_permissions(server_id);
+    CREATE INDEX IF NOT EXISTS idx_prompt_args_prompt ON mcp_prompt_arguments(prompt_id);
     CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_logs(api_key_id);
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
   `);
+
+  // Migration: ensure api_key_permissions supports NULL server_id/tool_id and has prompt_id column
+  try {
+    db.exec("INSERT INTO api_key_permissions (id, api_key_id, server_id, tool_id, prompt_id) VALUES ('__migration_test__', '__migration_test__', NULL, NULL, NULL)");
+    db.exec("DELETE FROM api_key_permissions WHERE id = '__migration_test__'");
+  } catch {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS api_key_permissions_new (
+          id TEXT PRIMARY KEY,
+          api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+          server_id TEXT REFERENCES mcp_servers(id) ON DELETE CASCADE,
+          tool_id TEXT REFERENCES mcp_tools(id) ON DELETE CASCADE,
+          prompt_id TEXT REFERENCES mcp_prompts(id) ON DELETE CASCADE,
+          UNIQUE(api_key_id, server_id, tool_id, prompt_id)
+        );
+        INSERT INTO api_key_permissions_new (id, api_key_id, server_id, tool_id)
+          SELECT id, api_key_id, server_id, tool_id FROM api_key_permissions;
+        DROP TABLE api_key_permissions;
+        ALTER TABLE api_key_permissions_new RENAME TO api_key_permissions;
+      `);
+    } catch {
+      // Table creation or rename failed
+    }
+  }
+
+  try {
+    db.exec("CREATE INDEX IF NOT EXISTS idx_perms_prompt ON api_key_permissions(prompt_id)");
+  } catch {
+    // Index already exists
+  }
 
   // Migration: update existing databases that don't have 'docker' in the CHECK constraint
   try {

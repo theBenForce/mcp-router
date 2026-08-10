@@ -42,16 +42,41 @@ export const apiKeys = sqliteTable("api_keys", {
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
 });
 
-// Permission Matrix: API Key -> Server/Tool access
+// User-Defined Prompts
+export const mcpPrompts = sqliteTable("mcp_prompts", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  title: text("title"),
+  description: text("description"),
+  contentTemplate: text("content_template").notNull(),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+});
+
+// Arguments per Prompt
+export const mcpPromptArguments = sqliteTable("mcp_prompt_arguments", {
+  id: text("id").primaryKey(),
+  promptId: text("prompt_id").notNull().references(() => mcpPrompts.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  required: integer("required").notNull().default(0),
+}, (table) => [
+  index("idx_prompt_args_prompt").on(table.promptId),
+  uniqueIndex("uq_prompt_args_prompt_name").on(table.promptId, table.name),
+]);
+
+// Permission Matrix: API Key -> Server/Tool/Prompt access
 export const apiKeyPermissions = sqliteTable("api_key_permissions", {
   id: text("id").primaryKey(),
   apiKeyId: text("api_key_id").notNull().references(() => apiKeys.id, { onDelete: "cascade" }),
-  serverId: text("server_id").notNull().references(() => mcpServers.id, { onDelete: "cascade" }),
+  serverId: text("server_id").references(() => mcpServers.id, { onDelete: "cascade" }),
   toolId: text("tool_id").references(() => mcpTools.id, { onDelete: "cascade" }),
+  promptId: text("prompt_id").references(() => mcpPrompts.id, { onDelete: "cascade" }),
 }, (table) => [
   index("idx_perms_key").on(table.apiKeyId),
   index("idx_perms_server").on(table.serverId),
-  uniqueIndex("uq_perms_key_server_tool").on(table.apiKeyId, table.serverId, table.toolId),
+  index("idx_perms_prompt").on(table.promptId),
+  uniqueIndex("uq_perms_key_server_tool_prompt").on(table.apiKeyId, table.serverId, table.toolId, table.promptId),
 ]);
 
 // Audit Log
