@@ -133,8 +133,8 @@ export const ServersPage: React.FC = () => {
                       : "glass-panel bg-zinc-900/50 border-zinc-800 hover:bg-zinc-900/80"
                   }`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       {server.transport_type === "stdio" ? (
                         <Terminal className="h-4 w-4 text-indigo-400 shrink-0" />
                       ) : server.transport_type === "docker" ? (
@@ -142,13 +142,13 @@ export const ServersPage: React.FC = () => {
                       ) : (
                         <Globe className="h-4 w-4 text-emerald-400 shrink-0" />
                       )}
-                      <div>
-                        <h3 className="font-semibold text-sm text-zinc-100">{server.name}</h3>
-                        <p className="text-xs text-zinc-400 line-clamp-1">{server.description || "No description"}</p>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-sm text-zinc-100 truncate">{server.name}</h3>
+                        <p className="text-xs text-zinc-400 truncate">{server.description || "No description"}</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {/* Edit button on list item */}
                       <Button
                         variant="ghost"
@@ -166,7 +166,7 @@ export const ServersPage: React.FC = () => {
                       {/* Status Badge */}
                       <Badge
                         variant="outline"
-                        className={`gap-1 font-mono text-[11px] ${
+                        className={`gap-1 font-mono text-[11px] shrink-0 ${
                           server.status === "connected"
                             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                             : server.status === "need_auth"
