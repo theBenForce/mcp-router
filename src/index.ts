@@ -11,6 +11,7 @@ import toolsController from "./api/tools.controller";
 import keysController from "./api/keys.controller";
 import auditController from "./api/audit.controller";
 import promptsController from "./api/prompts.controller";
+import oauthController from "./api/oauth.controller";
 import downstreamHandler from "./mcp/downstream/handler";
 
 const app = new Hono();
@@ -33,6 +34,7 @@ app.route("/api/tools", toolsController);
 app.route("/api/keys", keysController);
 app.route("/api/audit", auditController);
 app.route("/api/prompts", promptsController);
+app.route("/api/oauth", oauthController);
 
 // Downstream MCP Proxy Transports (SSE & Streamable HTTP)
 app.route("/", downstreamHandler);
