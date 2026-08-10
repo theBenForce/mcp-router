@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Key, ShieldCheck, Trash2, CheckCircle, Ban } from "lucide-react";
+import { Plus, Key, ShieldCheck, Trash2, CheckCircle, Ban, Code, Settings2 } from "lucide-react";
 import { CreateKeyModal } from "../components/CreateKeyModal";
 import { PermissionMatrixModal } from "../components/PermissionMatrixModal";
+import { KeyConfigModal } from "../components/KeyConfigModal";
 
 export const KeysPage: React.FC = () => {
   const [keys, setKeys] = useState<any[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [matrixKey, setMatrixKey] = useState<{ id: string; name: string } | null>(null);
+  const [configKey, setConfigKey] = useState<{ id: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -102,17 +104,28 @@ export const KeysPage: React.FC = () => {
                     {new Date(key.created_at).toLocaleDateString()}
                   </td>
                   <td className="p-4 text-right">
-                    {key.is_active ? (
+                    <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => handleRevoke(key.id)}
-                        className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
-                        title="Revoke Key"
+                        onClick={() => setConfigKey({ id: key.id, name: key.name })}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-medium text-emerald-400 hover:border-emerald-500/40 transition-all"
+                        title="Export MCP Config JSON"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Code className="h-3.5 w-3.5" />
+                        <span>Export Config</span>
                       </button>
-                    ) : (
-                      <span className="text-zinc-600 font-mono text-[11px]">Revoked</span>
-                    )}
+
+                      {key.is_active ? (
+                        <button
+                          onClick={() => handleRevoke(key.id)}
+                          className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+                          title="Revoke Key"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      ) : (
+                        <span className="text-zinc-600 font-mono text-[11px]">Revoked</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -133,6 +146,13 @@ export const KeysPage: React.FC = () => {
         keyName={matrixKey?.name || ""}
         onClose={() => setMatrixKey(null)}
         onSuccess={loadKeys}
+      />
+
+      <KeyConfigModal
+        isOpen={configKey !== null}
+        keyId={configKey?.id || null}
+        keyName={configKey?.name || ""}
+        onClose={() => setConfigKey(null)}
       />
     </div>
   );
