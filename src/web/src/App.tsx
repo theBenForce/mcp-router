@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ServersPage } from "./pages/ServersPage";
@@ -8,14 +9,14 @@ import { AuditPage } from "./pages/AuditPage";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"overview" | "servers" | "prompts" | "keys" | "audit">("overview");
   const [serverCount, setServerCount] = useState(0);
   const [promptCount, setPromptCount] = useState(0);
   const [keyCount, setKeyCount] = useState(0);
+  const location = useLocation();
 
   useEffect(() => {
     fetchCounts();
-  }, [activeTab]);
+  }, [location.pathname]);
 
   const fetchCounts = async () => {
     try {
@@ -37,18 +38,19 @@ export const App: React.FC = () => {
     <TooltipProvider>
       <div className="flex min-h-screen bg-zinc-950 text-zinc-100 font-sans">
         <Sidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
           serverCount={serverCount}
           promptCount={promptCount}
           keyCount={keyCount}
         />
         <main className="flex-1 p-8 overflow-y-auto">
-          {activeTab === "overview" && <OverviewPage onNavigate={setActiveTab} />}
-          {activeTab === "servers" && <ServersPage />}
-          {activeTab === "prompts" && <PromptsPage />}
-          {activeTab === "keys" && <KeysPage />}
-          {activeTab === "audit" && <AuditPage />}
+          <Routes>
+            <Route path="/" element={<OverviewPage />} />
+            <Route path="/servers" element={<ServersPage />} />
+            <Route path="/prompts" element={<PromptsPage />} />
+            <Route path="/keys" element={<KeysPage />} />
+            <Route path="/audit" element={<AuditPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </main>
       </div>
     </TooltipProvider>
@@ -56,3 +58,4 @@ export const App: React.FC = () => {
 };
 
 export default App;
+

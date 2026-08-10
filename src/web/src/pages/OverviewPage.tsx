@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Server, Key, Wrench, Activity, CheckCircle, AlertTriangle, ArrowRight, Container } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 interface OverviewPageProps {
-  onNavigate: (tab: "servers" | "keys" | "audit") => void;
+  onNavigate?: (tab: "servers" | "keys" | "audit") => void;
 }
 
 export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
+  const navigate = useNavigate();
   const [servers, setServers] = useState<any[]>([]);
   const [keys, setKeys] = useState<any[]>([]);
   const [tools, setTools] = useState<any[]>([]);
@@ -119,7 +121,10 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
             <Button
               variant="link"
               size="sm"
-              onClick={() => onNavigate("servers")}
+              onClick={() => {
+                if (onNavigate) onNavigate("servers");
+                navigate("/servers");
+              }}
               className="h-auto p-0 text-xs text-indigo-400 hover:text-indigo-300 gap-1"
             >
               <span>Manage</span>
@@ -172,7 +177,10 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
             <Button
               variant="link"
               size="sm"
-              onClick={() => onNavigate("audit")}
+              onClick={() => {
+                if (onNavigate) onNavigate("audit");
+                navigate("/audit");
+              }}
               className="h-auto p-0 text-xs text-indigo-400 hover:text-indigo-300 gap-1"
             >
               <span>View All</span>

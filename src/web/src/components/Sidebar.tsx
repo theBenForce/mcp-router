@@ -1,29 +1,27 @@
 import React from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { Server, Key, Activity, Cpu, ShieldCheck, MessageSquare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 interface SidebarProps {
-  activeTab: "overview" | "servers" | "prompts" | "keys" | "audit";
-  setActiveTab: (tab: "overview" | "servers" | "prompts" | "keys" | "audit") => void;
   serverCount: number;
   promptCount: number;
   keyCount: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  activeTab,
-  setActiveTab,
   serverCount,
   promptCount,
   keyCount,
 }) => {
+  const location = useLocation();
+
   const navItems = [
-    { id: "overview", label: "Overview", icon: Cpu, badge: null },
-    { id: "servers", label: "MCP Servers", icon: Server, badge: serverCount },
-    { id: "prompts", label: "Prompts", icon: MessageSquare, badge: promptCount },
-    { id: "keys", label: "API Keys", icon: Key, badge: keyCount },
-    { id: "audit", label: "Audit Logs", icon: Activity, badge: null },
+    { path: "/", label: "Overview", icon: Cpu, badge: null },
+    { path: "/servers", label: "MCP Servers", icon: Server, badge: serverCount },
+    { path: "/prompts", label: "Prompts", icon: MessageSquare, badge: promptCount },
+    { path: "/keys", label: "API Keys", icon: Key, badge: keyCount },
+    { path: "/audit", label: "Audit Logs", icon: Activity, badge: null },
   ];
 
   return (
@@ -44,16 +42,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <nav className="space-y-1.5">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive =
+              item.path === "/"
+                ? location.pathname === "/"
+                : location.pathname.startsWith(item.path);
+
             return (
-              <Button
-                key={item.id}
-                variant="ghost"
-                onClick={() => setActiveTab(item.id as any)}
-                className={`w-full justify-between px-3 py-2.5 h-auto text-sm font-medium transition-all duration-150 ${
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150 ${
                   isActive
                     ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-sm hover:bg-indigo-600/20 hover:text-indigo-300"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent"
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -65,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {item.badge}
                   </Badge>
                 )}
-              </Button>
+              </NavLink>
             );
           })}
         </nav>
@@ -89,3 +90,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </aside>
   );
 };
+;
