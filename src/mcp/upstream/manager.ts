@@ -1,10 +1,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { eq, and, notInArray, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { mcpServers, mcpTools } from "../../db/schema";
 import { createAuthProvider } from "./auth";
+import { MCPRouterOAuthProvider } from "./oauth-provider";
 import { DockerTransport } from "./docker-transport";
 import { parseDockerCommand } from "./docker-parser";
 import { sidecarManager } from "./sidecar";
@@ -45,13 +47,13 @@ export class UpstreamConnectionManager {
       const config = JSON.parse(server.configJson);
       const authProvider = createAuthProvider(server.authType, server.authDataJson);
       const authHeaders = await authProvider.getHeaders();
+      const oauthProvider = server.authType === "oauth2" ? new MCPRouterOAuthProvider({ serverId }) : undefined;
 
       let transport: Transport;
       let stopSidecar: (() => Promise<void>) | undefined;
 
       if (server.transportType === "stdio" || server.transportType === "docker") {
         // Both stdio and docker use the Docker sidecar + DockerTransport
-        // For docker: config may have rawCommand that needs parsing
         let sidecarConfig: {
           image?: string;
           command?: string;
@@ -61,7 +63,6 @@ export class UpstreamConnectionManager {
         };
 
         if (server.transportType === "docker" && config.rawCommand) {
-          // Parse the raw docker run command
           const parsed = parseDockerCommand(config.rawCommand);
           sidecarConfig = {
             image: parsed.image,
@@ -85,7 +86,6 @@ export class UpstreamConnectionManager {
         console.log(`[UpstreamManager] Sidecar spawned for ${serverId}, connecting transport...`);
         stopSidecar = sidecar.stop;
 
-        // Use DockerTransport for proper stdio communication with the container
         transport = new DockerTransport({
           readable: sidecar.readable,
           writable: sidecar.writable,
@@ -94,6 +94,15 @@ export class UpstreamConnectionManager {
       } else if (server.transportType === "sse") {
         const url = new URL(config.url);
         transport = new SSEClientTransport(url, {
+          authProvider: oauthProvider,
+          requestInit: {
+            headers: authHeaders,
+          },
+        });
+      } else if (server.transportType === "streamable-http" || server.transportType === "http") {
+        const url = new URL(config.url);
+        transport = new StreamableHTTPClientTransport(url, {
+          authProvider: oauthProvider,
           requestInit: {
             headers: authHeaders,
           },
@@ -170,10 +179,16 @@ export class UpstreamConnectionManager {
       return true;
     } catch (error: any) {
       const errorMessage = error?.message || String(error);
+      const isOAuthAuthRequired = errorMessage.includes("OAuth authorization required");
+
       console.error(`[UpstreamManager] Connection failed for server ${serverId}:`, errorMessage);
 
       db.update(mcpServers)
-        .set({ status: "error", lastError: errorMessage, updatedAt: sql`datetime('now')` })
+        .set({
+          status: isOAuthAuthRequired ? "need_auth" : "error",
+          lastError: errorMessage,
+          updatedAt: sql`datetime('now')`,
+        })
         .where(eq(mcpServers.id, serverId))
         .run();
 
