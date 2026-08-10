@@ -55,12 +55,15 @@ app.delete("/:id", async (c) => {
   return c.json({ success: true });
 });
 
-// Reconnect server
+// Reconnect server (non-blocking — connection happens in background)
 app.post("/:id/connect", async (c) => {
   const id = c.req.param("id");
-  const success = await serverService.connectServer(id);
+  // Fire connection in background, don't block the HTTP response
+  serverService.connectServer(id).catch((err) => {
+    console.error(`[API] Background connect failed for ${id}:`, err.message);
+  });
   const server = serverService.getServer(id);
-  return c.json({ success, server });
+  return c.json({ success: true, server });
 });
 
 // Disconnect server

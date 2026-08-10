@@ -80,7 +80,9 @@ export class UpstreamConnectionManager {
           };
         }
 
+        console.log(`[UpstreamManager] Spawning sidecar for ${serverId} (${server.transportType}), image: ${sidecarConfig.image}`);
         const sidecar = await sidecarManager.spawnSidecar(serverId, sidecarConfig);
+        console.log(`[UpstreamManager] Sidecar spawned for ${serverId}, connecting transport...`);
         stopSidecar = sidecar.stop;
 
         // Use DockerTransport for proper stdio communication with the container

@@ -1,4 +1,5 @@
 import Docker from "dockerode";
+import net from "node:net";
 import { PassThrough, Readable, Writable } from "node:stream";
 
 export interface StdioConfig {
@@ -18,10 +19,77 @@ export interface SidecarConnection {
 
 export class SidecarManager {
   private docker: Docker;
+  private socketPath: string;
   private activeContainers: Map<string, Docker.Container> = new Map();
 
   constructor(socketPath: string = "/var/run/docker.sock") {
     this.docker = new Docker({ socketPath });
+    this.socketPath = socketPath;
+  }
+
+  /**
+   * Attach to a running container's stdio using a raw TCP socket upgrade.
+   * This bypasses Dockerode's hijack which hangs in Docker-in-Docker (DinD)
+   * environments and Bun's broken HTTP upgrade event handling.
+   */
+  private attachRawStream(
+    containerId: string
+  ): Promise<{ socket: net.Socket; readable: Readable; writable: Writable }> {
+    return new Promise((resolve, reject) => {
+      const socket = net.createConnection(this.socketPath);
+      const reqStr =
+        `POST /containers/${containerId}/attach?stream=1&stdin=1&stdout=1&stderr=1 HTTP/1.1\r\n` +
+        `Host: localhost\r\n` +
+        `Content-Type: application/vnd.docker.raw-stream\r\n` +
+        `Upgrade: tcp\r\n` +
+        `Connection: Upgrade\r\n\r\n`;
+
+      let headersDone = false;
+      let buf = Buffer.alloc(0);
+
+      const readable = new PassThrough();
+      const stderrStream = new PassThrough();
+      const writable = new PassThrough();
+
+      stderrStream.on("data", (chunk: Buffer) => {
+        console.error(`[Sidecar ${containerId.substring(0, 12)} stderr]:`, chunk.toString().trim());
+      });
+
+      socket.on("data", (chunk: Buffer) => {
+        if (!headersDone) {
+          buf = Buffer.concat([buf, chunk]);
+          const idx = buf.indexOf("\r\n\r\n");
+          if (idx !== -1) {
+            const statusLine = buf.slice(0, idx).toString().split("\r\n")[0];
+            headersDone = true;
+            const remaining = buf.slice(idx + 4);
+
+            if (!statusLine.includes("101")) {
+              reject(new Error(`Docker attach failed: ${statusLine}`));
+              socket.destroy();
+              return;
+            }
+
+            // Set up demux for remaining data and future data
+            this.docker.modem.demuxStream(socket, readable, stderrStream);
+            if (remaining.length > 0) {
+              socket.unshift(remaining);
+            }
+
+            // Pipe writable to socket for stdin
+            writable.pipe(socket, { end: false });
+
+            resolve({ socket, readable, writable });
+          }
+        }
+      });
+
+      socket.on("error", (err) => {
+        if (!headersDone) reject(err);
+      });
+
+      socket.write(reqStr);
+    });
   }
 
   /**
@@ -101,33 +169,16 @@ export class SidecarManager {
 
     this.activeContainers.set(serverId, container);
 
-    // Attach to raw stdio stream before starting
-    const rawStream = await container.attach({
-      stream: true,
-      stdin: true,
-      stdout: true,
-      stderr: true,
-      hijack: true,
-    });
-
-    const readable = new PassThrough();
-    const stderrStream = new PassThrough();
-    const writable = new PassThrough();
-
-    // Demux multiplexed Docker output (stdout / stderr)
-    this.docker.modem.demuxStream(rawStream, readable, stderrStream);
-
-    // Pipe input writable stream directly to Docker raw stdin stream
-    writable.pipe(rawStream);
-
-    stderrStream.on("data", (chunk: Buffer) => {
-      console.error(`[Sidecar ${serverId} stderr]:`, chunk.toString().trim());
-    });
-
+    // Start the container first, then attach via raw TCP socket.
+    // This avoids Dockerode's hijack mode which hangs in DinD environments
+    // and works around Bun's lack of HTTP upgrade event support.
     await container.start();
+
+    const { socket: rawSocket, readable, writable } = await this.attachRawStream(container.id);
 
     const stop = async () => {
       try {
+        rawSocket.destroy();
         await container.stop({ t: 5 });
       } catch (err) {
         // Container might have auto-removed already
