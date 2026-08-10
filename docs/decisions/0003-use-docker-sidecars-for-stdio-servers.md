@@ -80,4 +80,4 @@ Drop stdio transport support entirely and require all registered MCP servers to 
 
 ## More Information
 
-Use the `dockerode` library for container lifecycle management. Recommended base images include `node:22-alpine` (~50MB) for `npx` servers and `python:3.12-slim` or `ghcr.io/astral-sh/uv:python3.12-alpine` (~40-50MB) for Python servers. For background on the core runtime decision, see ADR-0001.
+Use the `dockerode` library for container lifecycle management. Recommended base images include `node:22-alpine` (~50MB) for `npx` servers and `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` (~40-50MB) for Python/uv/uvx servers. For background on the core runtime decision, see ADR-0001.

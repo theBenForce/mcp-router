@@ -13,7 +13,7 @@ A local, Dockerized web application and API proxy gateway for **Model Context Pr
 ## 🌟 Key Features
 
 - 🔌 **Upstream MCP Server Management**:
-  - **Docker Sidecar Containers**: Spawns isolated, lightweight containers (`node:22-alpine`, `python:3.12-slim`) for `stdio` MCP servers via `/var/run/docker.sock`, preventing language version collisions.
+  - **Docker Sidecar Containers**: Spawns isolated, lightweight containers (`node:22-alpine`, `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`) for `stdio` MCP servers via `/var/run/docker.sock`, preventing language version collisions.
   - **Remote SSE Endpoints**: Connects to external HTTP/SSE MCP servers with custom headers and Bearer tokens.
 - 🏷️ **Automatic Tool Namespacing**: Discovers upstream tools and automatically prefixes them (`{server_name}__{tool_name}`) to guarantee unambiguous routing.
 - 🔑 **Hashed Downstream API Keys**: Generates secure API keys with `mcpr_` prefix. Only SHA-256 hashes are stored in SQLite; raw secret tokens are shown once at creation.
@@ -49,7 +49,7 @@ flowchart TB
 
     subgraph Upstreams ["Upstream MCP Servers"]
         SC_NODE["Docker Sidecar (node:22-alpine)"]
-        SC_PY["Docker Sidecar (python:3.12-slim)"]
+        SC_PY["Docker Sidecar (ghcr.io/astral-sh/uv:python3.12-bookworm-slim)"]
         REMOTE["Remote MCP Server (HTTP/SSE)"]
     end
 
