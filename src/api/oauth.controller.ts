@@ -139,8 +139,17 @@ app.get("/callback", async (c) => {
       console.error(`[OAuthController] Background connect failed after OAuth for ${serverId}:`, err);
     });
 
-    // Redirect to frontend dashboard with success query param
-    return c.redirect("/#/servers?oauth_success=true");
+    // Redirect to frontend dashboard with success query param.
+    // If request comes from Vite dev server or host header, redirect appropriately.
+    const host = c.req.header("host") || "";
+    const referer = c.req.header("referer") || "";
+    let redirectTarget = "/#/servers?oauth_success=true";
+    if (host.includes("5170") || referer.includes("5173")) {
+      // Dev mode: frontend is on 5173
+      const hostname = host.split(":")[0] || "localhost";
+      redirectTarget = `http://${hostname}:5173/#/servers?oauth_success=true`;
+    }
+    return c.redirect(redirectTarget);
   } catch (err: any) {
     console.error(`[OAuthController] Token exchange failed for server ${serverId}:`, err);
     return c.json({ error: err.message || String(err) }, 500);
