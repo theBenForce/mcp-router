@@ -3,6 +3,17 @@ import { Plus, Key, ShieldCheck, Trash2, CheckCircle, Ban, Code, Settings2 } fro
 import { CreateKeyModal } from "../components/CreateKeyModal";
 import { PermissionMatrixModal } from "../components/PermissionMatrixModal";
 import { KeyConfigModal } from "../components/KeyConfigModal";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const KeysPage: React.FC = () => {
   const [keys, setKeys] = useState<any[]>([]);
@@ -46,93 +57,99 @@ export const KeysPage: React.FC = () => {
           <h1 className="text-2xl font-bold tracking-tight text-zinc-100">API Keys</h1>
           <p className="text-sm text-zinc-400">Generate downstream API keys and configure granular server & tool permissions</p>
         </div>
-        <button
+        <Button
           onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20"
+          className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2 shadow-lg shadow-emerald-600/20"
         >
           <Plus className="h-4 w-4" />
           <span>Create New API Key</span>
-        </button>
+        </Button>
       </div>
 
       {/* Keys Table */}
-      <div className="glass-panel rounded-xl overflow-hidden">
+      <Card className="glass-panel border-zinc-800 bg-zinc-900/50 overflow-hidden">
         {loading ? (
           <div className="py-8 text-center text-xs text-zinc-500 font-mono">Loading API keys...</div>
         ) : keys.length === 0 ? (
           <div className="py-8 text-center text-xs text-zinc-500 font-mono">No API keys created yet.</div>
         ) : (
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-zinc-800 bg-zinc-950/40 text-zinc-400 font-medium">
-                <th className="p-4">Key Name</th>
-                <th className="p-4">Key Prefix</th>
-                <th className="p-4">Status</th>
-                <th className="p-4">Permissions</th>
-                <th className="p-4">Created</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/60">
+          <Table>
+            <TableHeader className="bg-zinc-950/40 border-b border-zinc-800">
+              <TableRow className="border-zinc-800 hover:bg-transparent">
+                <TableHead className="text-zinc-400">Key Name</TableHead>
+                <TableHead className="text-zinc-400">Key Prefix</TableHead>
+                <TableHead className="text-zinc-400">Status</TableHead>
+                <TableHead className="text-zinc-400">Permissions</TableHead>
+                <TableHead className="text-zinc-400">Created</TableHead>
+                <TableHead className="text-right text-zinc-400">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {keys.map((key) => (
-                <tr key={key.id} className="hover:bg-zinc-900/40 transition-colors">
-                  <td className="p-4 font-semibold text-zinc-200">{key.name}</td>
-                  <td className="p-4 font-mono text-emerald-400">{key.key_prefix}...</td>
-                  <td className="p-4">
+                <TableRow key={key.id} className="border-zinc-800/60 hover:bg-zinc-900/40">
+                  <TableCell className="font-semibold text-zinc-200">{key.name}</TableCell>
+                  <TableCell className="font-mono text-emerald-400">{key.key_prefix}...</TableCell>
+                  <TableCell>
                     {key.is_active ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <Badge variant="outline" className="gap-1 font-mono text-[11px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
                         <CheckCircle className="h-3 w-3" />
                         <span>Active</span>
-                      </span>
+                      </Badge>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                      <Badge variant="outline" className="gap-1 font-mono text-[11px] bg-rose-500/10 text-rose-400 border-rose-500/20">
                         <Ban className="h-3 w-3" />
                         <span>Revoked</span>
-                      </span>
+                      </Badge>
                     )}
-                  </td>
-                  <td className="p-4">
-                    <button
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => setMatrixKey({ id: key.id, name: key.name })}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-medium text-indigo-400 hover:border-indigo-500/40 transition-all"
+                      className="gap-1.5 h-8 text-xs font-medium text-indigo-400 border-zinc-800 bg-zinc-900 hover:border-indigo-500/40 hover:bg-zinc-800"
                     >
                       <ShieldCheck className="h-3.5 w-3.5" />
                       <span>{key.permission_count || 0} rule(s) configured</span>
-                    </button>
-                  </td>
-                  <td className="p-4 font-mono text-zinc-400">
+                    </Button>
+                  </TableCell>
+                  <TableCell className="font-mono text-zinc-400">
                     {new Date(key.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="p-4 text-right">
+                  </TableCell>
+                  <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => setConfigKey({ id: key.id, name: key.name })}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-medium text-emerald-400 hover:border-emerald-500/40 transition-all"
+                        className="gap-1 h-8 text-xs font-medium text-emerald-400 border-zinc-800 bg-zinc-900 hover:border-emerald-500/40 hover:bg-zinc-800"
                         title="Export MCP Config JSON"
                       >
                         <Code className="h-3.5 w-3.5" />
                         <span>Export Config</span>
-                      </button>
+                      </Button>
 
                       {key.is_active ? (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => handleRevoke(key.id)}
-                          className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+                          className="h-8 w-8 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
                           title="Revoke Key"
                         >
                           <Trash2 className="h-4 w-4" />
-                        </button>
+                        </Button>
                       ) : (
                         <span className="text-zinc-600 font-mono text-[11px]">Revoked</span>
                       )}
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
+      </Card>
 
       <CreateKeyModal
         isOpen={isCreateModalOpen}
