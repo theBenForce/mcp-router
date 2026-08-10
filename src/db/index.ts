@@ -64,6 +64,11 @@ function pushSchema(db: Database) {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
       description TEXT,
+      server_version TEXT,
+      server_title TEXT,
+      instructions TEXT,
+      website_url TEXT,
+      icons_json TEXT,
       transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'docker', 'sse', 'streamable-http')),
       config_json TEXT NOT NULL,
       auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer', 'oauth2')),
@@ -208,4 +213,9 @@ function pushSchema(db: Database) {
       ALTER TABLE mcp_servers_new RENAME TO mcp_servers;
     `);
   }
+  try { db.exec("ALTER TABLE mcp_servers ADD COLUMN server_version TEXT"); } catch {}
+  try { db.exec("ALTER TABLE mcp_servers ADD COLUMN server_title TEXT"); } catch {}
+  try { db.exec("ALTER TABLE mcp_servers ADD COLUMN instructions TEXT"); } catch {}
+  try { db.exec("ALTER TABLE mcp_servers ADD COLUMN website_url TEXT"); } catch {}
+  try { db.exec("ALTER TABLE mcp_servers ADD COLUMN icons_json TEXT"); } catch {}
 }
