@@ -1,0 +1,16 @@
+services:
+  mcp-router:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-router
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DATABASE_PATH=/data/mcp_router.db
