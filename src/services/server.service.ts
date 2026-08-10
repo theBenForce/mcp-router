@@ -6,18 +6,18 @@ import { upstreamManager } from "../mcp/upstream/manager";
 export interface CreateServerInput {
   name: string;
   description?: string;
-  transportType: "stdio" | "docker" | "sse";
+  transportType: "stdio" | "docker" | "sse" | "streamable-http";
   config: Record<string, unknown>;
-  authType?: "none" | "api_key" | "bearer";
+  authType?: "none" | "api_key" | "bearer" | "oauth2";
   authData?: Record<string, unknown>;
 }
 
 export interface UpdateServerInput {
   name?: string;
   description?: string;
-  transportType?: "stdio" | "docker" | "sse";
+  transportType?: "stdio" | "docker" | "sse" | "streamable-http";
   config?: Record<string, unknown>;
-  authType?: "none" | "api_key" | "bearer";
+  authType?: "none" | "api_key" | "bearer" | "oauth2";
   authData?: Record<string, unknown>;
 }
 

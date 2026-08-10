@@ -6,11 +6,11 @@ export const mcpServers = sqliteTable("mcp_servers", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
   description: text("description"),
-  transportType: text("transport_type", { enum: ["stdio", "docker", "sse"] }).notNull(),
+  transportType: text("transport_type", { enum: ["stdio", "docker", "sse", "streamable-http"] }).notNull(),
   configJson: text("config_json").notNull(),
-  authType: text("auth_type", { enum: ["none", "api_key", "bearer"] }).notNull().default("none"),
+  authType: text("auth_type", { enum: ["none", "api_key", "bearer", "oauth2"] }).notNull().default("none"),
   authDataJson: text("auth_data_json"),
-  status: text("status", { enum: ["connected", "disconnected", "connecting", "error"] }).notNull().default("disconnected"),
+  status: text("status", { enum: ["connected", "disconnected", "connecting", "error", "need_auth"] }).notNull().default("disconnected"),
   lastError: text("last_error"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
@@ -93,3 +93,13 @@ export const auditLogs = sqliteTable("audit_logs", {
   index("idx_audit_key").on(table.apiKeyId),
   index("idx_audit_created").on(table.createdAt),
 ]);
+
+// Pending OAuth Sessions
+export const mcpOauthSessions = sqliteTable("mcp_oauth_sessions", {
+  state: text("state").primaryKey(),
+  serverId: text("server_id").notNull().references(() => mcpServers.id, { onDelete: "cascade" }),
+  codeVerifier: text("code_verifier").notNull(),
+  redirectUrl: text("redirect_url").notNull(),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+});
+
