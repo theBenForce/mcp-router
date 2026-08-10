@@ -56,14 +56,14 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
 }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [transportType, setTransportType] = useState<"stdio" | "docker" | "sse">("stdio");
+  const [transportType, setTransportType] = useState<"stdio" | "docker" | "sse" | "streamable-http">("streamable-http");
 
   // Stdio fields
   const [command, setCommand] = useState("npx");
   const [argsStr, setArgsStr] = useState("-y @modelcontextprotocol/server-filesystem /data");
   const [image, setImage] = useState("");
 
-  // SSE fields
+  // Remote (SSE / HTTP) fields
   const [url, setUrl] = useState("");
 
   // Docker fields
@@ -72,7 +72,7 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
   const [envVars, setEnvVars] = useState<{ key: string; value: string }[]>([]);
 
   // Auth fields
-  const [authType, setAuthType] = useState<"none" | "bearer" | "api_key">("none");
+  const [authType, setAuthType] = useState<"none" | "bearer" | "api_key" | "oauth2">("none");
   const [bearerToken, setBearerToken] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [headerName, setHeaderName] = useState("X-API-Key");
@@ -197,12 +197,12 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
             <input
               type="text"
               required
-              placeholder="e.g. filesystem, github, slack"
+              placeholder="e.g. atlassian, filesystem, github"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-indigo-500"
             />
-            <p className="text-[11px] text-zinc-400 mt-1">Used as tool namespace prefix (e.g. filesystem__read_file)</p>
+            <p className="text-[11px] text-zinc-400 mt-1">Used as tool namespace prefix (e.g. atlassian__get_issue)</p>
           </div>
 
           <div>
@@ -219,7 +219,31 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
           {/* Transport Type Select */}
           <div>
             <label className="block text-xs font-medium text-zinc-300 mb-1.5">Transport Type *</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setTransportType("streamable-http")}
+                className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg border text-xs font-medium transition-all ${
+                  transportType === "streamable-http"
+                    ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-400"
+                    : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <Globe className="h-3.5 w-3.5" />
+                <span>Streamable HTTP (Remote)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransportType("sse")}
+                className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg border text-xs font-medium transition-all ${
+                  transportType === "sse"
+                    ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-400"
+                    : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <Globe className="h-3.5 w-3.5" />
+                <span>HTTP / SSE</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setTransportType("stdio")}
@@ -243,18 +267,6 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
               >
                 <Container className="h-3.5 w-3.5" />
                 <span>Docker Container</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTransportType("sse")}
-                className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg border text-xs font-medium transition-all ${
-                  transportType === "sse"
-                    ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-400"
-                    : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <Globe className="h-3.5 w-3.5" />
-                <span>HTTP / SSE</span>
               </button>
             </div>
           </div>
@@ -386,11 +398,15 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
           ) : (
             <div className="space-y-3 p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">SSE Endpoint URL *</label>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">Server Endpoint URL *</label>
                 <input
                   type="url"
                   required
-                  placeholder="https://api.example.com/mcp/sse"
+                  placeholder={
+                    transportType === "streamable-http"
+                      ? "https://mcp.atlassian.com/v1/mcp/authv2"
+                      : "https://api.example.com/mcp/sse"
+                  }
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-mono text-zinc-100 focus:outline-none focus:border-indigo-500"
@@ -408,10 +424,20 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
               className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-indigo-500"
             >
               <option value="none">None / Public</option>
+              <option value="oauth2">OAuth 2.1 (PKCE / Auto-Discovery)</option>
               <option value="bearer">Bearer Token</option>
               <option value="api_key">API Key Header</option>
             </select>
           </div>
+
+          {authType === "oauth2" && (
+            <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs space-y-1">
+              <p className="font-semibold">OAuth 2.1 Auto-Discovery Enabled</p>
+              <p className="text-zinc-400 text-[11px]">
+                Uses standard Metadata Discovery (RFC 8414/9728) and Dynamic Client Registration (RFC 7591). After adding this server, click "Authenticate" on the server list card to authorize via browser.
+              </p>
+            </div>
+          )}
 
           {authType === "bearer" && (
             <div>

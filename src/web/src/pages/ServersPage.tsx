@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Server, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle, Terminal, Globe, Container, Wrench } from "lucide-react";
+import { Plus, Server, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle, Terminal, Globe, Container, Wrench, Key } from "lucide-react";
 import { AddServerModal } from "../components/AddServerModal";
 
 export const ServersPage: React.FC = () => {
@@ -50,6 +50,10 @@ export const ServersPage: React.FC = () => {
     }
   };
 
+  const handleOAuthAuthorize = (id: string) => {
+    window.location.href = `/api/oauth/authorize?serverId=${id}`;
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this server configuration?")) return;
     try {
@@ -67,7 +71,7 @@ export const ServersPage: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-100">MCP Servers</h1>
-          <p className="text-sm text-zinc-400">Manage upstream stdio sidecars and remote SSE endpoints</p>
+          <p className="text-sm text-zinc-400">Manage upstream stdio sidecars, remote SSE, and Streamable HTTP OAuth endpoints</p>
         </div>
         <button
           onClick={() => setIsAddModalOpen(true)}
@@ -120,14 +124,17 @@ export const ServersPage: React.FC = () => {
                       className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono ${
                         server.status === "connected"
                           ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          : server.status === "need_auth"
+                          ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                           : server.status === "error"
                           ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
                           : "bg-zinc-800 text-zinc-400"
                       }`}
                     >
                       {server.status === "connected" && <CheckCircle className="h-3 w-3" />}
+                      {server.status === "need_auth" && <Key className="h-3 w-3" />}
                       {server.status === "error" && <XCircle className="h-3 w-3" />}
-                      {server.status}
+                      {server.status === "need_auth" ? "Needs Auth" : server.status}
                     </span>
                   </div>
                 </div>
@@ -147,6 +154,15 @@ export const ServersPage: React.FC = () => {
                   <p className="text-xs text-zinc-400">{selectedServer.description}</p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {(selectedServer.status === "need_auth" || selectedServer.auth_type === "oauth2") && (
+                    <button
+                      onClick={() => handleOAuthAuthorize(selectedServer.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow-md shadow-amber-600/20"
+                    >
+                      <Key className="h-3.5 w-3.5" />
+                      <span>Authenticate</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleReconnect(selectedServer.id)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
