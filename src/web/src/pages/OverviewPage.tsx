@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Server, Key, Wrench, Activity, CheckCircle, AlertTriangle, ArrowRight, Container } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface OverviewPageProps {
   onNavigate: (tab: "servers" | "keys" | "audit") => void;
@@ -55,134 +58,159 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
 
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <div className="glass-panel p-5 rounded-xl space-y-2">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-xs font-medium uppercase tracking-wider">MCP Servers</span>
+        <Card className="glass-panel border-zinc-800 bg-zinc-900/50">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+              MCP Servers
+            </CardTitle>
             <Server className="h-4 w-4 text-indigo-400" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold font-mono text-zinc-100">{servers.length}</span>
-            <span className="text-xs text-emerald-400 font-mono">({connectedServersCount} active)</span>
-          </div>
-        </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold font-mono text-zinc-100">{servers.length}</span>
+              <span className="text-xs text-emerald-400 font-mono">({connectedServersCount} active)</span>
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="glass-panel p-5 rounded-xl space-y-2">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-xs font-medium uppercase tracking-wider">Discovered Tools</span>
+        <Card className="glass-panel border-zinc-800 bg-zinc-900/50">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+              Discovered Tools
+            </CardTitle>
             <Wrench className="h-4 w-4 text-purple-400" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-zinc-100">{tools.length}</div>
-        </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-zinc-100">{tools.length}</div>
+          </CardContent>
+        </Card>
 
-        <div className="glass-panel p-5 rounded-xl space-y-2">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-xs font-medium uppercase tracking-wider">API Keys</span>
+        <Card className="glass-panel border-zinc-800 bg-zinc-900/50">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+              API Keys
+            </CardTitle>
             <Key className="h-4 w-4 text-emerald-400" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-zinc-100">{keys.length}</div>
-        </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-zinc-100">{keys.length}</div>
+          </CardContent>
+        </Card>
 
-        <div className="glass-panel p-5 rounded-xl space-y-2">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-xs font-medium uppercase tracking-wider">Recent Invocations</span>
+        <Card className="glass-panel border-zinc-800 bg-zinc-900/50">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+              Recent Invocations
+            </CardTitle>
             <Activity className="h-4 w-4 text-amber-400" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-zinc-100">{recentLogs.length}</div>
-        </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono text-zinc-100">{recentLogs.length}</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Main Section Grid */}
       <div className="grid grid-cols-2 gap-6">
         {/* Connected Servers Preview */}
-        <div className="glass-panel p-5 rounded-xl space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-sm text-zinc-200">Registered MCP Servers</h2>
-            <button
+        <Card className="glass-panel border-zinc-800 bg-zinc-900/50">
+          <CardHeader className="flex flex-row items-center justify-between pb-4">
+            <CardTitle className="font-semibold text-sm text-zinc-200">Registered MCP Servers</CardTitle>
+            <Button
+              variant="link"
+              size="sm"
               onClick={() => onNavigate("servers")}
-              className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
+              className="h-auto p-0 text-xs text-indigo-400 hover:text-indigo-300 gap-1"
             >
               <span>Manage</span>
               <ArrowRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          {servers.length === 0 ? (
-            <div className="py-6 text-center text-xs text-zinc-500 font-mono">No servers registered.</div>
-          ) : (
-            <div className="space-y-2">
-              {servers.slice(0, 4).map((server) => (
-                <div
-                  key={server.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-zinc-950/40 border border-zinc-800/60"
-                >
-                  <div className="flex items-center gap-3">
-                    {server.status === "connected" ? (
-                      <CheckCircle className="h-4 w-4 text-emerald-400" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-amber-400" />
-                    )}
-                    <div>
-                      <div className="font-medium text-xs text-zinc-200">{server.name}</div>
-                    <div className="text-[11px] text-zinc-500 font-mono">
-                      {server.transport_type === "docker" ? (
-                        <span className="flex items-center gap-1"><Container className="h-3 w-3 text-cyan-400" /> docker</span>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {servers.length === 0 ? (
+              <div className="py-6 text-center text-xs text-zinc-500 font-mono">No servers registered.</div>
+            ) : (
+              <div className="space-y-2">
+                {servers.slice(0, 4).map((server) => (
+                  <div
+                    key={server.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-zinc-950/40 border border-zinc-800/60"
+                  >
+                    <div className="flex items-center gap-3">
+                      {server.status === "connected" ? (
+                        <CheckCircle className="h-4 w-4 text-emerald-400" />
                       ) : (
-                        server.transport_type
+                        <AlertTriangle className="h-4 w-4 text-amber-400" />
                       )}
+                      <div>
+                        <div className="font-medium text-xs text-zinc-200">{server.name}</div>
+                        <div className="text-[11px] text-zinc-500 font-mono">
+                          {server.transport_type === "docker" ? (
+                            <span className="flex items-center gap-1">
+                              <Container className="h-3 w-3 text-cyan-400" /> docker
+                            </span>
+                          ) : (
+                            server.transport_type
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    </div>
+                    <Badge variant="secondary" className="font-mono text-[11px] font-normal">
+                      {server.tool_count || 0} tools
+                    </Badge>
                   </div>
-                  <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-zinc-900 text-zinc-400">
-                    {server.tool_count || 0} tools
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Recent Audit Logs */}
-        <div className="glass-panel p-5 rounded-xl space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-sm text-zinc-200">Recent Audit Invocations</h2>
-            <button
+        <Card className="glass-panel border-zinc-800 bg-zinc-900/50">
+          <CardHeader className="flex flex-row items-center justify-between pb-4">
+            <CardTitle className="font-semibold text-sm text-zinc-200">Recent Audit Invocations</CardTitle>
+            <Button
+              variant="link"
+              size="sm"
               onClick={() => onNavigate("audit")}
-              className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
+              className="h-auto p-0 text-xs text-indigo-400 hover:text-indigo-300 gap-1"
             >
               <span>View All</span>
               <ArrowRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          {recentLogs.length === 0 ? (
-            <div className="py-6 text-center text-xs text-zinc-500 font-mono">No tool invocations recorded yet.</div>
-          ) : (
-            <div className="space-y-2">
-              {recentLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-zinc-950/40 border border-zinc-800/60 text-xs"
-                >
-                  <div>
-                    <div className="font-mono text-zinc-200 font-medium">{log.tool_name}</div>
-                    <div className="text-[11px] text-zinc-500">
-                      Key: <span className="font-mono">{log.key_prefix || "none"}</span>
-                    </div>
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[11px] font-mono ${
-                      log.status === "success"
-                        ? "bg-emerald-500/10 text-emerald-400"
-                        : "bg-rose-500/10 text-rose-400"
-                    }`}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {recentLogs.length === 0 ? (
+              <div className="py-6 text-center text-xs text-zinc-500 font-mono">No tool invocations recorded yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {recentLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-zinc-950/40 border border-zinc-800/60 text-xs"
                   >
-                    {log.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                    <div>
+                      <div className="font-mono text-zinc-200 font-medium">{log.tool_name}</div>
+                      <div className="text-[11px] text-zinc-500">
+                        Key: <span className="font-mono">{log.key_prefix || "none"}</span>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={`font-mono text-[11px] border-0 ${
+                        log.status === "success"
+                          ? "bg-emerald-500/10 text-emerald-400"
+                          : "bg-rose-500/10 text-rose-400"
+                      }`}
+                    >
+                      {log.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
