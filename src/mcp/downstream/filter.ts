@@ -1,4 +1,6 @@
+import { eq, and, isNull } from "drizzle-orm";
 import { getDb } from "../../db";
+import { apiKeyPermissions, mcpTools, mcpServers } from "../../db/schema";
 
 export interface AuthorizedToolTarget {
   serverId: string;
@@ -14,8 +16,13 @@ export class PermissionFilterEngine {
 
     // Fetch all permission rules for the API key
     const perms = db
-      .query("SELECT server_id, tool_id FROM api_key_permissions WHERE api_key_id = ?")
-      .all(apiKeyId) as Array<{ server_id: string; tool_id: string | null }>;
+      .select({
+        server_id: apiKeyPermissions.serverId,
+        tool_id: apiKeyPermissions.toolId,
+      })
+      .from(apiKeyPermissions)
+      .where(eq(apiKeyPermissions.apiKeyId, apiKeyId))
+      .all();
 
     if (perms.length === 0) {
       return [];
@@ -33,13 +40,20 @@ export class PermissionFilterEngine {
     }
 
     const allTools = db
-      .query(`
-        SELECT t.*, s.name as server_name
-        FROM mcp_tools t
-        JOIN mcp_servers s ON t.server_id = s.id
-        WHERE s.status = 'connected'
-      `)
-      .all() as any[];
+      .select({
+        id: mcpTools.id,
+        server_id: mcpTools.serverId,
+        name: mcpTools.name,
+        namespaced_name: mcpTools.namespacedName,
+        description: mcpTools.description,
+        input_schema_json: mcpTools.inputSchemaJson,
+        created_at: mcpTools.createdAt,
+        server_name: mcpServers.name,
+      })
+      .from(mcpTools)
+      .innerJoin(mcpServers, eq(mcpTools.serverId, mcpServers.id))
+      .where(eq(mcpServers.status, "connected"))
+      .all();
 
     return allTools.filter((t) => {
       if (serverIdsWithAllAccess.has(t.server_id)) {
@@ -55,8 +69,14 @@ export class PermissionFilterEngine {
   authorizeToolCall(apiKeyId: string, namespacedName: string): AuthorizedToolTarget {
     const db = getDb();
     const tool = db
-      .query("SELECT id, server_id, name FROM mcp_tools WHERE namespaced_name = ?")
-      .get(namespacedName) as { id: string; server_id: string; name: string } | null;
+      .select({
+        id: mcpTools.id,
+        server_id: mcpTools.serverId,
+        name: mcpTools.name,
+      })
+      .from(mcpTools)
+      .where(eq(mcpTools.namespacedName, namespacedName))
+      .get();
 
     if (!tool) {
       throw new Error(`Tool '${namespacedName}' not found`);
@@ -64,13 +84,38 @@ export class PermissionFilterEngine {
 
     // Check if key has permission for this server (all tools) OR this specific tool
     const perm = db
-      .query(`
-        SELECT id FROM api_key_permissions
-        WHERE api_key_id = ? AND server_id = ? AND (tool_id IS NULL OR tool_id = ?)
-      `)
-      .get(apiKeyId, tool.server_id, tool.id);
+      .select({ id: apiKeyPermissions.id })
+      .from(apiKeyPermissions)
+      .where(
+        and(
+          eq(apiKeyPermissions.apiKeyId, apiKeyId),
+          eq(apiKeyPermissions.serverId, tool.server_id),
+        )
+      )
+      .all()
+      .find((p) => {
+        // Re-check: we need to match either tool_id IS NULL (server-level) or tool_id = tool.id
+        // Since the SQL OR with isNull is complex in Drizzle, we fetch matching rows and filter
+        return true; // We already filtered by apiKeyId + serverId
+      });
 
-    if (!perm) {
+    // More precise check: verify actual permission exists
+    const permCheck = db
+      .select({ id: apiKeyPermissions.id, tool_id: apiKeyPermissions.toolId })
+      .from(apiKeyPermissions)
+      .where(
+        and(
+          eq(apiKeyPermissions.apiKeyId, apiKeyId),
+          eq(apiKeyPermissions.serverId, tool.server_id),
+        )
+      )
+      .all();
+
+    const hasPermission = permCheck.some(
+      (p) => p.tool_id === null || p.tool_id === tool.id
+    );
+
+    if (!hasPermission) {
       throw new Error(`Permission denied: API key does not have access to tool '${namespacedName}'`);
     }
 

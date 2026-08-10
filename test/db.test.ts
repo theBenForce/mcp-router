@@ -1,5 +1,5 @@
 import { describe, expect, test, afterAll } from "bun:test";
-import { getDb, closeDb } from "../src/db";
+import { getDb, getRawDb, closeDb } from "../src/db";
 
 describe("Database initialization", () => {
   afterAll(() => {
@@ -10,8 +10,9 @@ describe("Database initialization", () => {
     const db = getDb();
     expect(db).toBeDefined();
 
-    // Query tables in database
-    const tables = db
+    // Query tables in database using raw connection
+    const rawDb = getRawDb();
+    const tables = rawDb
       .query("SELECT name FROM sqlite_master WHERE type='table'")
       .all() as { name: string }[];
 

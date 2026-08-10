@@ -1,7 +1,7 @@
 import { describe, expect, test, afterAll } from "bun:test";
 import app from "../src/index";
 import { keyService } from "../src/services/key.service";
-import { getDb, closeDb } from "../src/db";
+import { getDb, getRawDb, closeDb } from "../src/db";
 
 describe("Downstream MCP Proxy & Permission Filter", () => {
   afterAll(() => {
@@ -20,18 +20,18 @@ describe("Downstream MCP Proxy & Permission Filter", () => {
   });
 
   test("POST /mcp returns tools/list filtered by API key permissions", async () => {
-    const db = getDb();
+    const rawDb = getRawDb();
 
-    // Insert server and tool
+    // Insert server and tool using raw SQL for test setup
     const serverId = crypto.randomUUID();
     const toolId = crypto.randomUUID();
 
-    db.query(`
+    rawDb.query(`
       INSERT INTO mcp_servers (id, name, transport_type, config_json, status)
       VALUES (?, 'srv-a', 'sse', '{}', 'connected')
     `).run(serverId);
 
-    db.query(`
+    rawDb.query(`
       INSERT INTO mcp_tools (id, server_id, name, namespaced_name, description, input_schema_json)
       VALUES (?, ?, 'calc', 'srv-a__calc', 'Calculator tool', '{}')
     `).run(toolId, serverId);

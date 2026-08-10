@@ -1,40 +1,51 @@
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db";
+import { mcpTools, mcpServers } from "../db/schema";
 
 export class ToolService {
   listAllTools(serverId?: string) {
     const db = getDb();
+    const query = db
+      .select({
+        id: mcpTools.id,
+        server_id: mcpTools.serverId,
+        name: mcpTools.name,
+        namespaced_name: mcpTools.namespacedName,
+        description: mcpTools.description,
+        input_schema_json: mcpTools.inputSchemaJson,
+        created_at: mcpTools.createdAt,
+        server_name: mcpServers.name,
+        server_status: mcpServers.status,
+      })
+      .from(mcpTools)
+      .innerJoin(mcpServers, eq(mcpTools.serverId, mcpServers.id))
+      .orderBy(mcpTools.namespacedName);
+
     if (serverId) {
-      return db
-        .query(`
-          SELECT t.*, s.name as server_name, s.status as server_status
-          FROM mcp_tools t
-          JOIN mcp_servers s ON t.server_id = s.id
-          WHERE t.server_id = ?
-          ORDER BY t.namespaced_name ASC
-        `)
-        .all(serverId);
+      return query.where(eq(mcpTools.serverId, serverId)).all();
     }
 
-    return db
-      .query(`
-        SELECT t.*, s.name as server_name, s.status as server_status
-        FROM mcp_tools t
-        JOIN mcp_servers s ON t.server_id = s.id
-        ORDER BY t.namespaced_name ASC
-      `)
-      .all();
+    return query.all();
   }
 
   getToolByNamespacedName(namespacedName: string) {
     const db = getDb();
     return db
-      .query(`
-        SELECT t.*, s.name as server_name, s.status as server_status
-        FROM mcp_tools t
-        JOIN mcp_servers s ON t.server_id = s.id
-        WHERE t.namespaced_name = ?
-      `)
-      .get(namespacedName) as any;
+      .select({
+        id: mcpTools.id,
+        server_id: mcpTools.serverId,
+        name: mcpTools.name,
+        namespaced_name: mcpTools.namespacedName,
+        description: mcpTools.description,
+        input_schema_json: mcpTools.inputSchemaJson,
+        created_at: mcpTools.createdAt,
+        server_name: mcpServers.name,
+        server_status: mcpServers.status,
+      })
+      .from(mcpTools)
+      .innerJoin(mcpServers, eq(mcpTools.serverId, mcpServers.id))
+      .where(eq(mcpTools.namespacedName, namespacedName))
+      .get();
   }
 }
 

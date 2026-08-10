@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
+import { eq, and, sql } from "drizzle-orm";
 import { getDb } from "../db";
+import { apiKeys, apiKeyPermissions, mcpServers, mcpTools } from "../db/schema";
 
 export interface CreateKeyInput {
   name: string;
@@ -23,10 +25,16 @@ export class KeyService {
     const keyPrefix = secretKey.slice(0, 12); // e.g. "mcpr_a1b2c3d4"
     const keyHash = crypto.createHash("sha256").update(secretKey).digest("hex");
 
-    db.query(`
-      INSERT INTO api_keys (id, name, key_prefix, key_hash, is_active, expires_at)
-      VALUES (?, ?, ?, ?, 1, ?)
-    `).run(id, input.name, keyPrefix, keyHash, input.expiresAt || null);
+    db.insert(apiKeys)
+      .values({
+        id,
+        name: input.name,
+        keyPrefix,
+        keyHash,
+        isActive: 1,
+        expiresAt: input.expiresAt || null,
+      })
+      .run();
 
     if (input.permissions && input.permissions.length > 0) {
       this.setPermissions(id, { permissions: input.permissions });
@@ -46,27 +54,39 @@ export class KeyService {
   listKeys() {
     const db = getDb();
     return db
-      .query(`
-        SELECT
-          k.id,
-          k.name,
-          k.key_prefix,
-          k.is_active,
-          k.expires_at,
-          k.last_used_at,
-          k.created_at,
-          COUNT(p.id) as permission_count
-        FROM api_keys k
-        LEFT JOIN api_key_permissions p ON k.id = p.api_key_id
-        GROUP BY k.id
-        ORDER BY k.created_at DESC
-      `)
+      .select({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        key_prefix: apiKeys.keyPrefix,
+        is_active: apiKeys.isActive,
+        expires_at: apiKeys.expiresAt,
+        last_used_at: apiKeys.lastUsedAt,
+        created_at: apiKeys.createdAt,
+        permission_count: sql<number>`COUNT(${apiKeyPermissions.id})`,
+      })
+      .from(apiKeys)
+      .leftJoin(apiKeyPermissions, eq(apiKeys.id, apiKeyPermissions.apiKeyId))
+      .groupBy(apiKeys.id)
+      .orderBy(sql`${apiKeys.createdAt} DESC`)
       .all();
   }
 
   getKey(id: string) {
     const db = getDb();
-    const key = db.query("SELECT id, name, key_prefix, is_active, expires_at, last_used_at, created_at FROM api_keys WHERE id = ?").get(id) as any;
+    const key = db
+      .select({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        key_prefix: apiKeys.keyPrefix,
+        is_active: apiKeys.isActive,
+        expires_at: apiKeys.expiresAt,
+        last_used_at: apiKeys.lastUsedAt,
+        created_at: apiKeys.createdAt,
+      })
+      .from(apiKeys)
+      .where(eq(apiKeys.id, id))
+      .get();
+
     if (!key) return null;
 
     const permissions = this.getPermissions(id);
@@ -78,46 +98,52 @@ export class KeyService {
 
   revokeKey(id: string) {
     const db = getDb();
-    db.query("UPDATE api_keys SET is_active = 0 WHERE id = ?").run(id);
+    db.update(apiKeys)
+      .set({ isActive: 0 })
+      .where(eq(apiKeys.id, id))
+      .run();
     return true;
   }
 
   deleteKey(id: string) {
     const db = getDb();
-    db.query("DELETE FROM api_keys WHERE id = ?").run(id);
+    db.delete(apiKeys).where(eq(apiKeys.id, id)).run();
     return true;
   }
 
   getPermissions(keyId: string) {
     const db = getDb();
     return db
-      .query(`
-        SELECT
-          p.id,
-          p.server_id,
-          p.tool_id,
-          s.name as server_name,
-          t.name as tool_name,
-          t.namespaced_name
-        FROM api_key_permissions p
-        JOIN mcp_servers s ON p.server_id = s.id
-        LEFT JOIN mcp_tools t ON p.tool_id = t.id
-        WHERE p.api_key_id = ?
-      `)
-      .all(keyId);
+      .select({
+        id: apiKeyPermissions.id,
+        server_id: apiKeyPermissions.serverId,
+        tool_id: apiKeyPermissions.toolId,
+        server_name: mcpServers.name,
+        tool_name: mcpTools.name,
+        namespaced_name: mcpTools.namespacedName,
+      })
+      .from(apiKeyPermissions)
+      .innerJoin(mcpServers, eq(apiKeyPermissions.serverId, mcpServers.id))
+      .leftJoin(mcpTools, eq(apiKeyPermissions.toolId, mcpTools.id))
+      .where(eq(apiKeyPermissions.apiKeyId, keyId))
+      .all();
   }
 
   setPermissions(keyId: string, input: SetPermissionsInput) {
     const db = getDb();
-    db.query("DELETE FROM api_key_permissions WHERE api_key_id = ?").run(keyId);
-
-    const stmt = db.prepare(`
-      INSERT INTO api_key_permissions (id, api_key_id, server_id, tool_id)
-      VALUES (?, ?, ?, ?)
-    `);
+    db.delete(apiKeyPermissions)
+      .where(eq(apiKeyPermissions.apiKeyId, keyId))
+      .run();
 
     for (const perm of input.permissions) {
-      stmt.run(crypto.randomUUID(), keyId, perm.serverId, perm.toolId || null);
+      db.insert(apiKeyPermissions)
+        .values({
+          id: crypto.randomUUID(),
+          apiKeyId: keyId,
+          serverId: perm.serverId,
+          toolId: perm.toolId || null,
+        })
+        .run();
     }
 
     return this.getPermissions(keyId);
@@ -132,12 +158,16 @@ export class KeyService {
     const keyHash = crypto.createHash("sha256").update(token).digest("hex");
     const db = getDb();
     const key = db
-      .query(`
-        SELECT id, name, key_prefix, is_active, expires_at
-        FROM api_keys
-        WHERE key_hash = ? AND is_active = 1
-      `)
-      .get(keyHash) as any;
+      .select({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        key_prefix: apiKeys.keyPrefix,
+        is_active: apiKeys.isActive,
+        expires_at: apiKeys.expiresAt,
+      })
+      .from(apiKeys)
+      .where(and(eq(apiKeys.keyHash, keyHash), eq(apiKeys.isActive, 1)))
+      .get();
 
     if (!key) return null;
 
@@ -147,7 +177,10 @@ export class KeyService {
     }
 
     // Update last_used_at
-    db.query("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?").run(key.id);
+    db.update(apiKeys)
+      .set({ lastUsedAt: sql`datetime('now')` })
+      .where(eq(apiKeys.id, key.id))
+      .run();
 
     return key;
   }

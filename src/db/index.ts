@@ -1,35 +1,151 @@
 import { Database } from "bun:sqlite";
-import fs from "node:fs";
+import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import path from "node:path";
+import fs from "node:fs";
 import { config } from "../config";
-import schemaSql from "./schema.sql" with { type: "text" };
+import * as schema from "./schema";
 
-let dbInstance: Database | null = null;
+let sqliteInstance: Database | null = null;
+let dbInstance: BunSQLiteDatabase<typeof schema> | null = null;
 
-export function getDb(): Database {
+export function getDb(): BunSQLiteDatabase<typeof schema> {
   if (dbInstance) {
     return dbInstance;
   }
 
-  // Ensure directory exists
-  const dir = path.dirname(config.databasePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  // Ensure directory exists for file-based databases
+  if (config.databasePath !== ":memory:") {
+    const dir = path.dirname(config.databasePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
   }
 
-  dbInstance = new Database(config.databasePath);
-  dbInstance.exec("PRAGMA journal_mode = WAL;");
-  dbInstance.exec("PRAGMA foreign_keys = ON;");
+  sqliteInstance = new Database(config.databasePath);
+  sqliteInstance.exec("PRAGMA journal_mode = WAL;");
+  sqliteInstance.exec("PRAGMA foreign_keys = ON;");
 
-  // Run initial schema migration
-  dbInstance.exec(schemaSql);
+  dbInstance = drizzle(sqliteInstance, { schema });
+
+  // Run schema push (create tables if not exist)
+  // We use raw SQL for initial schema setup to avoid needing drizzle-kit at runtime
+  pushSchema(sqliteInstance);
 
   return dbInstance;
 }
 
+/**
+ * Returns the raw bun:sqlite Database instance for cases where
+ * raw SQL is needed (e.g., tests that check sqlite_master).
+ */
+export function getRawDb(): Database {
+  if (!sqliteInstance) {
+    getDb(); // initialize
+  }
+  return sqliteInstance!;
+}
+
 export function closeDb(): void {
-  if (dbInstance) {
-    dbInstance.close();
+  if (sqliteInstance) {
+    sqliteInstance.close();
+    sqliteInstance = null;
     dbInstance = null;
+  }
+}
+
+/**
+ * Push schema tables using CREATE TABLE IF NOT EXISTS.
+ * This avoids requiring drizzle-kit migrations at runtime while
+ * keeping the Drizzle schema as the single source of truth.
+ */
+function pushSchema(db: Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mcp_servers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'docker', 'sse')),
+      config_json TEXT NOT NULL,
+      auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer')),
+      auth_data_json TEXT,
+      status TEXT NOT NULL DEFAULT 'disconnected' CHECK(status IN ('connected', 'disconnected', 'connecting', 'error')),
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS mcp_tools (
+      id TEXT PRIMARY KEY,
+      server_id TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      namespaced_name TEXT NOT NULL,
+      description TEXT,
+      input_schema_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(server_id, name)
+    );
+
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      key_hash TEXT NOT NULL UNIQUE,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      expires_at TEXT,
+      last_used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS api_key_permissions (
+      id TEXT PRIMARY KEY,
+      api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+      server_id TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+      tool_id TEXT REFERENCES mcp_tools(id) ON DELETE CASCADE,
+      UNIQUE(api_key_id, server_id, tool_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      api_key_id TEXT REFERENCES api_keys(id) ON DELETE SET NULL,
+      server_id TEXT REFERENCES mcp_servers(id) ON DELETE SET NULL,
+      tool_name TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('allowed', 'denied', 'error', 'success')),
+      duration_ms INTEGER,
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tools_server ON mcp_tools(server_id);
+    CREATE INDEX IF NOT EXISTS idx_perms_key ON api_key_permissions(api_key_id);
+    CREATE INDEX IF NOT EXISTS idx_perms_server ON api_key_permissions(server_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_logs(api_key_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+  `);
+
+  // Migration: update existing databases that don't have 'docker' in the CHECK constraint
+  try {
+    db.exec("INSERT INTO mcp_servers (id, name, transport_type, config_json) VALUES ('__migration_test__', '__migration_test__', 'docker', '{}')");
+    db.exec("DELETE FROM mcp_servers WHERE id = '__migration_test__'");
+  } catch {
+    // CHECK constraint failed - need to migrate
+    // SQLite doesn't support ALTER TABLE for CHECK constraints, so we recreate the table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS mcp_servers_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'docker', 'sse')),
+        config_json TEXT NOT NULL,
+        auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer')),
+        auth_data_json TEXT,
+        status TEXT NOT NULL DEFAULT 'disconnected' CHECK(status IN ('connected', 'disconnected', 'connecting', 'error')),
+        last_error TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO mcp_servers_new SELECT * FROM mcp_servers;
+      DROP TABLE mcp_servers;
+      ALTER TABLE mcp_servers_new RENAME TO mcp_servers;
+    `);
   }
 }

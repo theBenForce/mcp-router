@@ -1,4 +1,5 @@
-import { getDb } from "../db";
+import { getDb, getRawDb } from "../db";
+import { auditLogs } from "../db/schema";
 
 export interface LogToolCallInput {
   apiKeyId?: string | null;
@@ -13,18 +14,17 @@ export class AuditService {
   logToolCall(input: LogToolCallInput) {
     const db = getDb();
     const id = crypto.randomUUID();
-    db.query(`
-      INSERT INTO audit_logs (id, api_key_id, server_id, tool_name, status, duration_ms, error_message)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      input.apiKeyId || null,
-      input.serverId || null,
-      input.toolName,
-      input.status,
-      input.durationMs || null,
-      input.errorMessage || null
-    );
+    db.insert(auditLogs)
+      .values({
+        id,
+        apiKeyId: input.apiKeyId || null,
+        serverId: input.serverId || null,
+        toolName: input.toolName,
+        status: input.status,
+        durationMs: input.durationMs || null,
+        errorMessage: input.errorMessage || null,
+      })
+      .run();
     return id;
   }
 
@@ -35,10 +35,12 @@ export class AuditService {
     limit?: number;
     offset?: number;
   }) {
-    const db = getDb();
     const limit = filters?.limit || 50;
     const offset = filters?.offset || 0;
 
+    // For the dynamic filter query, we use raw SQL via the underlying
+    // bun:sqlite connection since Drizzle's dynamic WHERE chaining is verbose.
+    // The Drizzle schema is still the source of truth for table definitions.
     let query = `
       SELECT
         a.*,
@@ -71,7 +73,8 @@ export class AuditService {
     query += " ORDER BY a.created_at DESC LIMIT ? OFFSET ?";
     params.push(limit, offset);
 
-    return db.query(query).all(...params);
+    const rawDb = getRawDb();
+    return rawDb.query(query).all(...params);
   }
 }
 

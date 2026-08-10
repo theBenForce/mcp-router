@@ -9,16 +9,21 @@
     "start": "bun src/index.ts",
     "test": "bun test",
     "build:web": "bun --cwd src/web run build",
-    "build": "bun build:web"
+    "build": "bun build:web",
+    "db:generate": "bun --bun drizzle-kit generate",
+    "db:migrate": "bun --bun drizzle-kit migrate",
+    "db:studio": "bun --bun drizzle-kit studio"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.1.0",
     "dockerode": "^4.0.2",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.6.14"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/dockerode": "^4.0.1",
+    "drizzle-kit": "^0.31.10",
     "typescript": "^5.7.2"
   }
 }

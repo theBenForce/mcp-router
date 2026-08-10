@@ -1,10 +1,12 @@
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db";
+import { mcpServers, mcpTools } from "../db/schema";
 import { upstreamManager } from "../mcp/upstream/manager";
 
 export interface CreateServerInput {
   name: string;
   description?: string;
-  transportType: "stdio" | "sse";
+  transportType: "stdio" | "docker" | "sse";
   config: Record<string, unknown>;
   authType?: "none" | "api_key" | "bearer";
   authData?: Record<string, unknown>;
@@ -13,7 +15,7 @@ export interface CreateServerInput {
 export interface UpdateServerInput {
   name?: string;
   description?: string;
-  transportType?: "stdio" | "sse";
+  transportType?: "stdio" | "docker" | "sse";
   config?: Record<string, unknown>;
   authType?: "none" | "api_key" | "bearer";
   authData?: Record<string, unknown>;
@@ -23,35 +25,65 @@ export class ServerService {
   listServers() {
     const db = getDb();
     return db
-      .query(`
-        SELECT
-          s.*,
-          COUNT(t.id) as tool_count
-        FROM mcp_servers s
-        LEFT JOIN mcp_tools t ON s.id = t.server_id
-        GROUP BY s.id
-        ORDER BY s.created_at DESC
-      `)
+      .select({
+        id: mcpServers.id,
+        name: mcpServers.name,
+        description: mcpServers.description,
+        transport_type: mcpServers.transportType,
+        config_json: mcpServers.configJson,
+        auth_type: mcpServers.authType,
+        auth_data_json: mcpServers.authDataJson,
+        status: mcpServers.status,
+        last_error: mcpServers.lastError,
+        created_at: mcpServers.createdAt,
+        updated_at: mcpServers.updatedAt,
+        tool_count: sql<number>`COUNT(${mcpTools.id})`,
+      })
+      .from(mcpServers)
+      .leftJoin(mcpTools, eq(mcpServers.id, mcpTools.serverId))
+      .groupBy(mcpServers.id)
+      .orderBy(sql`${mcpServers.createdAt} DESC`)
       .all();
   }
 
   getServer(id: string) {
     const db = getDb();
     const server = db
-      .query("SELECT * FROM mcp_servers WHERE id = ?")
-      .get(id) as any;
+      .select()
+      .from(mcpServers)
+      .where(eq(mcpServers.id, id))
+      .get();
 
     if (!server) return null;
 
     const tools = db
-      .query("SELECT * FROM mcp_tools WHERE server_id = ? ORDER BY name ASC")
-      .all(id);
+      .select()
+      .from(mcpTools)
+      .where(eq(mcpTools.serverId, id))
+      .orderBy(mcpTools.name)
+      .all();
 
     return {
       ...server,
-      config: JSON.parse(server.config_json || "{}"),
-      auth_data: JSON.parse(server.auth_data_json || "{}"),
-      tools,
+      // Expose parsed config and auth_data alongside the raw columns
+      // for backward compat with API consumers expecting these shapes
+      config: JSON.parse(server.configJson || "{}"),
+      auth_data: JSON.parse(server.authDataJson || "{}"),
+      // Map Drizzle camelCase columns to snake_case for API consumers
+      transport_type: server.transportType,
+      config_json: server.configJson,
+      auth_type: server.authType,
+      auth_data_json: server.authDataJson,
+      last_error: server.lastError,
+      created_at: server.createdAt,
+      updated_at: server.updatedAt,
+      tools: tools.map((t) => ({
+        ...t,
+        server_id: t.serverId,
+        namespaced_name: t.namespacedName,
+        input_schema_json: t.inputSchemaJson,
+        created_at: t.createdAt,
+      })),
     };
   }
 
@@ -62,18 +94,18 @@ export class ServerService {
     const authDataJson = JSON.stringify(input.authData || {});
     const authType = input.authType || "none";
 
-    db.query(`
-      INSERT INTO mcp_servers (id, name, description, transport_type, config_json, auth_type, auth_data_json, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'disconnected')
-    `).run(
-      id,
-      input.name,
-      input.description || "",
-      input.transportType,
-      configJson,
-      authType,
-      authDataJson
-    );
+    db.insert(mcpServers)
+      .values({
+        id,
+        name: input.name,
+        description: input.description || "",
+        transportType: input.transportType,
+        configJson,
+        authType,
+        authDataJson,
+        status: "disconnected",
+      })
+      .run();
 
     // Attempt connection
     await upstreamManager.connectServer(id);
@@ -93,11 +125,18 @@ export class ServerService {
     const authType = input.authType ?? existing.auth_type;
     const authDataJson = input.authData ? JSON.stringify(input.authData) : existing.auth_data_json;
 
-    db.query(`
-      UPDATE mcp_servers
-      SET name = ?, description = ?, transport_type = ?, config_json = ?, auth_type = ?, auth_data_json = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `).run(name, description, transportType, configJson, authType, authDataJson, id);
+    db.update(mcpServers)
+      .set({
+        name,
+        description,
+        transportType,
+        configJson,
+        authType,
+        authDataJson,
+        updatedAt: sql`datetime('now')`,
+      })
+      .where(eq(mcpServers.id, id))
+      .run();
 
     // Reconnect with updated configuration
     await upstreamManager.connectServer(id);
@@ -108,7 +147,7 @@ export class ServerService {
   async deleteServer(id: string) {
     await upstreamManager.disconnectServer(id);
     const db = getDb();
-    db.query("DELETE FROM mcp_servers WHERE id = ?").run(id);
+    db.delete(mcpServers).where(eq(mcpServers.id, id)).run();
     return true;
   }
 

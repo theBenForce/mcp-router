@@ -1,7 +1,7 @@
 import { describe, expect, test, afterAll } from "bun:test";
 import { keyService } from "../src/services/key.service";
 import { serverService } from "../src/services/server.service";
-import { closeDb, getDb } from "../src/db";
+import { closeDb, getDb, getRawDb } from "../src/db";
 
 describe("KeyService", () => {
   afterAll(() => {
@@ -29,11 +29,11 @@ describe("KeyService", () => {
   });
 
   test("sets and retrieves key permissions", async () => {
-    const db = getDb();
+    const rawDb = getRawDb();
 
     // Insert dummy server
     const serverId = crypto.randomUUID();
-    db.query(`
+    rawDb.query(`
       INSERT INTO mcp_servers (id, name, transport_type, config_json, status)
       VALUES (?, 'test-srv', 'sse', '{}', 'connected')
     `).run(serverId);
