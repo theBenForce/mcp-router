@@ -12,26 +12,27 @@ We need to choose a JavaScript/TypeScript runtime for the MCP Router backend ser
 ## Decision Drivers
 
 * Native TypeScript support without a separate compilation step
-* Built-in SQLite driver (`bun:sqlite`) eliminates external dependency
+* Built-in SQLite driver (`bun:sqlite`) eliminates external database dependencies
+* Built-in package manager (`bun install`) replaces `npm`/`pnpm` for both backend and frontend
 * Fast startup time for containerized deployment
-* Built-in test runner and package manager
-* Compatibility with the npm ecosystem and Node.js APIs
+* Built-in test runner (`bun test`) and all-in-one toolkit
 
 ## Considered Options
 
-* Bun — Native TS, built-in SQLite, fast startup, all-in-one toolkit
-* Node.js with tsx/ts-node — Mature ecosystem, widest compatibility, but requires separate TypeScript compilation and external SQLite driver (`better-sqlite3`)
+* Bun — Native TS, built-in SQLite, built-in package manager, fast startup, all-in-one toolkit
+* Node.js with pnpm/npm — Mature ecosystem, but requires external package manager (pnpm), separate TypeScript loader, and native C++ SQLite driver (`better-sqlite3`)
 * Deno — Native TS, security-first, but smaller ecosystem, different module resolution, no built-in SQLite
 
 ## Decision Outcome
 
-Chosen option: "Bun", because it provides native TypeScript execution, a built-in high-performance SQLite driver (`bun:sqlite`), fast cold-start times ideal for containers, and an integrated package manager + test runner that reduces toolchain complexity.
+Chosen option: "Bun", because it provides native TypeScript execution, a built-in high-performance SQLite driver (`bun:sqlite`), an integrated package manager (`bun install`) that eliminates the need for Node.js and `pnpm` in Docker builds, fast cold-start times ideal for containers, and a built-in test runner (`bun test`).
 
 ### Consequences
 
 * Good, because no build step needed for backend TypeScript — run `.ts` files directly
 * Good, because `bun:sqlite` provides synchronous, zero-dependency SQLite access with excellent performance
-* Good, because faster package installs and test execution compared to Node.js tooling
+* Good, because `bun install` acts as a ultra-fast, single package manager for both the root project and `src/web` frontend, avoiding a Node.js build image in Docker
+* Good, because faster package installs and test execution compared to Node.js / pnpm tooling
 * Bad, because smaller community than Node.js — some npm packages may have subtle compatibility issues
 * Bad, because some Node.js APIs (like certain stream behaviors) may differ slightly in Bun
 

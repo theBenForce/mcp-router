@@ -49,10 +49,9 @@ Build a single-page application (SPA) using React 18+, Vite as the build tool, T
 * Good, because shadcn/ui code lives directly inside the project repository, allowing complete customization of styles and component behaviors without library lock-in.
 * Good, because Vite offers extremely fast build speeds, HMR, and straightforward configuration for bundling static single-page applications.
 * Good, because React's declarative state management simplifies handling complex UI interactions like multi-select matrices, optimistic UI updates, and real-time SSE event feeds.
-* Good, because integration with `@tanstack/react-query` delivers effortless client-side caching, background revalidation, and loading state management.
-* Neutral, because requiring a frontend build toolchain introduces node_modules complexity and build configuration to the frontend directory.
+* Good, because Bun handles frontend package installation (`bun install`) and building (`bun run build`), keeping the Dockerfile single-engine (Bun only) without needing a Node.js image.
+* Neutral, because requiring a frontend build toolchain introduces `node_modules` and build configuration to the `src/web` directory.
 * Bad, because client-side JavaScript bundle sizes (~200KB+ gzipped) are larger than server-rendered alternatives.
-* Bad, because Docker multi-stage builds require a dedicated Node build phase for Vite before copying static assets to the final runner image.
 
 ### Server-side rendered TSX + HTMX
 
