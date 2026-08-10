@@ -64,14 +64,22 @@ function pushSchema(db: Database) {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
       description TEXT,
-      transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'docker', 'sse')),
+      transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'docker', 'sse', 'streamable-http')),
       config_json TEXT NOT NULL,
-      auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer')),
+      auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer', 'oauth2')),
       auth_data_json TEXT,
-      status TEXT NOT NULL DEFAULT 'disconnected' CHECK(status IN ('connected', 'disconnected', 'connecting', 'error')),
+      status TEXT NOT NULL DEFAULT 'disconnected' CHECK(status IN ('connected', 'disconnected', 'connecting', 'error', 'need_auth')),
       last_error TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS mcp_oauth_sessions (
+      state TEXT PRIMARY KEY,
+      server_id TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+      code_verifier TEXT NOT NULL,
+      redirect_url TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS mcp_tools (
@@ -174,9 +182,9 @@ function pushSchema(db: Database) {
     // Index already exists
   }
 
-  // Migration: update existing databases that don't have 'docker' in the CHECK constraint
+  // Migration: update existing databases that don't have 'streamable-http' or 'oauth2' in the CHECK constraint
   try {
-    db.exec("INSERT INTO mcp_servers (id, name, transport_type, config_json) VALUES ('__migration_test__', '__migration_test__', 'docker', '{}')");
+    db.exec("INSERT INTO mcp_servers (id, name, transport_type, auth_type, config_json) VALUES ('__migration_test__', '__migration_test__', 'streamable-http', 'oauth2', '{}')");
     db.exec("DELETE FROM mcp_servers WHERE id = '__migration_test__'");
   } catch {
     // CHECK constraint failed - need to migrate
@@ -186,11 +194,11 @@ function pushSchema(db: Database) {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
         description TEXT,
-        transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'docker', 'sse')),
+        transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'docker', 'sse', 'streamable-http')),
         config_json TEXT NOT NULL,
-        auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer')),
+        auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer', 'oauth2')),
         auth_data_json TEXT,
-        status TEXT NOT NULL DEFAULT 'disconnected' CHECK(status IN ('connected', 'disconnected', 'connecting', 'error')),
+        status TEXT NOT NULL DEFAULT 'disconnected' CHECK(status IN ('connected', 'disconnected', 'connecting', 'error', 'need_auth')),
         last_error TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
