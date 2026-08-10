@@ -154,4 +154,80 @@ describe("Servers & Tools API", () => {
     expect(fetched.website_url).toBe("https://example.com");
     expect(fetched.icons_json).toBe('[{"src":"icon.png"}]');
   });
+
+  test("stdio transport type accepts and persists environment variables", async () => {
+    const serverName = `stdio-env-server-${crypto.randomUUID().slice(0, 8)}`;
+    const payload = {
+      name: serverName,
+      description: "Stdio server with env vars",
+      transportType: "stdio",
+      config: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-memory"],
+        env: {
+          MEMORY_LIMIT: "1024",
+          DEBUG_LOGS: "true",
+        },
+      },
+      authType: "none",
+    };
+
+    const createRes = await app.fetch(
+      new Request("http://localhost/api/servers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(created.id).toBeDefined();
+    expect(created.transport_type).toBe("stdio");
+    expect(created.config.env).toEqual({
+      MEMORY_LIMIT: "1024",
+      DEBUG_LOGS: "true",
+    });
+
+    // Verify GET /api/servers/:id retrieves the env vars intact
+    const getRes = await app.fetch(new Request(`http://localhost/api/servers/${created.id}`));
+    expect(getRes.status).toBe(200);
+    const fetched = await getRes.json();
+    expect(fetched.config.env.MEMORY_LIMIT).toBe("1024");
+    expect(fetched.config.env.DEBUG_LOGS).toBe("true");
+  });
+
+  test("sidecar transport types accept and persist volume mappings", async () => {
+    const serverName = `sidecar-vol-server-${crypto.randomUUID().slice(0, 8)}`;
+    const payload = {
+      name: serverName,
+      description: "Stdio server with volume binds",
+      transportType: "stdio",
+      config: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "/data"],
+        volumes: ["/home/user/data:/data:ro", "/var/log/mcp:/logs"],
+      },
+      authType: "none",
+    };
+
+    const createRes = await app.fetch(
+      new Request("http://localhost/api/servers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(created.id).toBeDefined();
+    expect(created.config.volumes).toEqual(["/home/user/data:/data:ro", "/var/log/mcp:/logs"]);
+
+    // Verify GET /api/servers/:id retrieves volume binds
+    const getRes = await app.fetch(new Request(`http://localhost/api/servers/${created.id}`));
+    expect(getRes.status).toBe(200);
+    const fetched = await getRes.json();
+    expect(fetched.config.volumes).toEqual(["/home/user/data:/data:ro", "/var/log/mcp:/logs"]);
+  });
 });
