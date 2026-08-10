@@ -14,15 +14,15 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:3000",
+        target: "http://localhost:5170",
         changeOrigin: true,
       },
       "/sse": {
-        target: "http://localhost:3000",
+        target: "http://localhost:5170",
         changeOrigin: true,
       },
       "/mcp": {
-        target: "http://localhost:3000",
+        target: "http://localhost:5170",
         changeOrigin: true,
       },
     },

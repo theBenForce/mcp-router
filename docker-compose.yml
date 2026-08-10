@@ -6,11 +6,11 @@ services:
     container_name: mcp-router
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "5170:5170"
     volumes:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - PORT=3001
+      - PORT=5170
       - HOST=0.0.0.0
       - DATABASE_PATH=/data/mcp_router.db

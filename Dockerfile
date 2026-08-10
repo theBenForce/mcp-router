@@ -23,9 +23,9 @@ COPY --from=web-builder /app/web/dist ./public
 
 RUN mkdir -p /data
 
-EXPOSE 3001
+EXPOSE 5170
 
-ENV PORT=3001
+ENV PORT=5170
 ENV HOST=0.0.0.0
 ENV DATABASE_PATH=/data/mcp_router.db
 ENV PUBLIC_DIR=/app/public
