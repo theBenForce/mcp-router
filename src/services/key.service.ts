@@ -1,16 +1,16 @@
 import crypto from "node:crypto";
 import { eq, and, sql } from "drizzle-orm";
 import { getDb } from "../db";
-import { apiKeys, apiKeyPermissions, mcpServers, mcpTools } from "../db/schema";
+import { apiKeys, apiKeyPermissions, mcpServers, mcpTools, mcpPrompts } from "../db/schema";
 
 export interface CreateKeyInput {
   name: string;
   expiresAt?: string | null;
-  permissions?: Array<{ serverId: string; toolId?: string | null }>;
+  permissions?: Array<{ serverId?: string | null; toolId?: string | null; promptId?: string | null }>;
 }
 
 export interface SetPermissionsInput {
-  permissions: Array<{ serverId: string; toolId?: string | null }>;
+  permissions: Array<{ serverId?: string | null; toolId?: string | null; promptId?: string | null }>;
 }
 
 export class KeyService {
@@ -118,13 +118,16 @@ export class KeyService {
         id: apiKeyPermissions.id,
         server_id: apiKeyPermissions.serverId,
         tool_id: apiKeyPermissions.toolId,
+        prompt_id: apiKeyPermissions.promptId,
         server_name: mcpServers.name,
         tool_name: mcpTools.name,
+        prompt_name: mcpPrompts.name,
         namespaced_name: mcpTools.namespacedName,
       })
       .from(apiKeyPermissions)
-      .innerJoin(mcpServers, eq(apiKeyPermissions.serverId, mcpServers.id))
+      .leftJoin(mcpServers, eq(apiKeyPermissions.serverId, mcpServers.id))
       .leftJoin(mcpTools, eq(apiKeyPermissions.toolId, mcpTools.id))
+      .leftJoin(mcpPrompts, eq(apiKeyPermissions.promptId, mcpPrompts.id))
       .where(eq(apiKeyPermissions.apiKeyId, keyId))
       .all();
   }
@@ -136,12 +139,14 @@ export class KeyService {
       .run();
 
     for (const perm of input.permissions) {
+      if (!perm.serverId && !perm.promptId) continue;
       db.insert(apiKeyPermissions)
         .values({
           id: crypto.randomUUID(),
           apiKeyId: keyId,
-          serverId: perm.serverId,
+          serverId: perm.serverId || null,
           toolId: perm.toolId || null,
+          promptId: perm.promptId || null,
         })
         .run();
     }
