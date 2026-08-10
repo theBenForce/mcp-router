@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { generateContainerName, sanitizeContainerName } from "../src/mcp/upstream/sidecar";
+import { generateContainerName, getDefaultSidecarImage, sanitizeContainerName } from "../src/mcp/upstream/sidecar";
 
 describe("sidecar container naming", () => {
   describe("sanitizeContainerName", () => {
@@ -55,6 +55,44 @@ describe("sidecar container naming", () => {
     test("falls back to sidecar prefix and shortId when no context is available", () => {
       const name = generateContainerName(serverId, {});
       expect(name).toBe("mcp-sidecar-sidecar-4fdf9d6e");
+    });
+  });
+
+  describe("StdioConfig env formatting", () => {
+    test("formats env Record<string, string> into Docker Env array", () => {
+      const config = {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-memory"],
+        env: {
+          API_KEY: "secret",
+          PORT: "8080",
+        },
+      };
+
+      const envArray = config.env
+        ? Object.entries(config.env).map(([k, v]) => `${k}=${v}`)
+        : [];
+
+      expect(envArray).toEqual(["API_KEY=secret", "PORT=8080"]);
+    });
+  });
+
+  describe("getDefaultSidecarImage", () => {
+    test("returns ghcr.io/astral-sh/uv:python3.12-bookworm-slim for uvx, uv, python, and pip commands", () => {
+      expect(getDefaultSidecarImage("uvx")).toBe("ghcr.io/astral-sh/uv:python3.12-bookworm-slim");
+      expect(getDefaultSidecarImage("uv")).toBe("ghcr.io/astral-sh/uv:python3.12-bookworm-slim");
+      expect(getDefaultSidecarImage("python")).toBe("ghcr.io/astral-sh/uv:python3.12-bookworm-slim");
+      expect(getDefaultSidecarImage("pip")).toBe("ghcr.io/astral-sh/uv:python3.12-bookworm-slim");
+      expect(getDefaultSidecarImage("python3")).toBe("ghcr.io/astral-sh/uv:python3.12-bookworm-slim");
+    });
+
+    test("returns node:22-alpine for npx and other non-python commands", () => {
+      expect(getDefaultSidecarImage("npx")).toBe("node:22-alpine");
+      expect(getDefaultSidecarImage("node")).toBe("node:22-alpine");
+    });
+
+    test("throws error if no command is provided", () => {
+      expect(() => getDefaultSidecarImage(undefined)).toThrow();
     });
   });
 });

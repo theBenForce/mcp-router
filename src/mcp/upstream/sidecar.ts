@@ -73,6 +73,23 @@ export function generateContainerName(
   return `mcp-sidecar-${sanitized}-${shortId}`;
 }
 
+/**
+ * Resolves the default Docker image based on the command being run.
+ * Python, pip, uv, and uvx commands use ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+ * so that uv/uvx executables and Python 3.12 are available out-of-the-box.
+ * All other commands default to node:22-alpine.
+ */
+export function getDefaultSidecarImage(command?: string): string {
+  if (!command) {
+    throw new Error("Either image or command must be specified");
+  }
+  const isPython =
+    command.includes("python") ||
+    command.includes("pip") ||
+    command.includes("uv");
+  return isPython ? "ghcr.io/astral-sh/uv:python3.12-bookworm-slim" : "node:22-alpine";
+}
+
 export class SidecarManager {
   private docker: Docker;
   private socketPath: string;
@@ -161,11 +178,7 @@ export class SidecarManager {
     if (config.image) {
       image = config.image;
     } else if (config.command) {
-      const isPython =
-        config.command.includes("python") ||
-        config.command.includes("pip") ||
-        config.command.includes("uv");
-      image = isPython ? "python:3.12-slim" : "node:22-alpine";
+      image = getDefaultSidecarImage(config.command);
     } else {
       throw new Error("Either image or command must be specified");
     }
