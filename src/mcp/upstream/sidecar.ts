@@ -8,6 +8,7 @@ export interface StdioConfig {
   args?: string[];
   env?: Record<string, string>;
   volumes?: string[];
+  name?: string;
 }
 
 export interface SidecarConnection {
@@ -15,6 +16,61 @@ export interface SidecarConnection {
   readable: Readable;
   writable: Writable;
   stop: () => Promise<void>;
+}
+
+/**
+ * Sanitizes a raw string into a valid, Docker-compliant container name substring.
+ * Allowed characters in Docker container names: [a-zA-Z0-9_.-]
+ */
+export function sanitizeContainerName(name: string): string {
+  const sanitized = name
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return sanitized || "sidecar";
+}
+
+/**
+ * Generates a meaningful, unique Docker container name for a sidecar instance.
+ * Format: mcp-sidecar-<sanitized-name>-<short-server-id>
+ */
+export function generateContainerName(
+  serverId: string,
+  config: StdioConfig,
+  serverName?: string
+): string {
+  let rawName = config.name;
+
+  if (!rawName && serverName) {
+    rawName = serverName;
+  }
+
+  if (!rawName && config.image) {
+    const parts = config.image.split("/");
+    const basename = parts[parts.length - 1];
+    rawName = basename.split(":")[0].split("@")[0].replace(/^mcp[-_]/, "");
+  }
+
+  if (!rawName && (config.command || (config.args && config.args.length > 0))) {
+    const fullCmd = [config.command, ...(config.args || [])].filter(Boolean).join(" ");
+    const match = fullCmd.match(/(?:@[\w-]+\/)?[\w-]+(?:-server|-mcp)?/g);
+    if (match && match.length > 0) {
+      const lastMatch = match[match.length - 1];
+      rawName = lastMatch
+        .replace(/^@[\w-]+\//, "")
+        .replace(/^mcp[-_]/, "")
+        .replace(/^server[-_]/, "");
+    }
+  }
+
+  if (!rawName) {
+    rawName = "sidecar";
+  }
+
+  const sanitized = sanitizeContainerName(rawName);
+  const shortId = serverId.includes("-") ? serverId.split("-")[0] : serverId.substring(0, 8);
+  return `mcp-sidecar-${sanitized}-${shortId}`;
 }
 
 export class SidecarManager {
@@ -97,7 +153,8 @@ export class SidecarManager {
    */
   async spawnSidecar(
     serverId: string,
-    config: StdioConfig
+    config: StdioConfig,
+    serverName?: string
   ): Promise<SidecarConnection> {
     // Determine the Docker image to use
     let image: string;
@@ -142,8 +199,11 @@ export class SidecarManager {
       });
     }
 
-    // Create sidecar container
-    const containerOpts: Docker.ContainerCreateOptions = {
+    const containerName = generateContainerName(serverId, config, serverName);
+
+    // Create sidecar container with meaningful container name
+    const containerOpts: Docker.ContainerCreateOptions & { name?: string } = {
+      name: containerName,
       Image: image,
       Env: env,
       OpenStdin: true,
@@ -165,7 +225,23 @@ export class SidecarManager {
       containerOpts.Cmd = cmd;
     }
 
-    const container = await this.docker.createContainer(containerOpts);
+    let container: Docker.Container;
+    try {
+      container = await this.docker.createContainer(containerOpts);
+    } catch (err: any) {
+      if (err?.statusCode === 409 || (err?.message && String(err.message).includes("already in use"))) {
+        try {
+          const existing = this.docker.getContainer(containerName);
+          await existing.remove({ force: true });
+        } catch {
+          // ignore error if container was already cleaned up
+        }
+        containerOpts.name = `${containerName}-${Math.random().toString(36).substring(2, 6)}`;
+        container = await this.docker.createContainer(containerOpts);
+      } else {
+        throw err;
+      }
+    }
 
     this.activeContainers.set(serverId, container);
 
