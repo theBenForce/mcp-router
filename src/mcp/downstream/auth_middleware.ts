@@ -12,7 +12,7 @@ export async function downstreamAuthMiddleware(c: Context, next: Next) {
 
   // 2. Fallback to query parameter (e.g. for SSE clients)
   if (!token) {
-    token = c.req.query("apiKey");
+    token = c.req.query("apiKey") || c.req.query("key");
   }
 
   if (!token) {

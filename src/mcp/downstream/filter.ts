@@ -20,6 +20,7 @@ export class PermissionFilterEngine {
       .select({
         server_id: apiKeyPermissions.serverId,
         tool_id: apiKeyPermissions.toolId,
+        action_type: apiKeyPermissions.actionType,
       })
       .from(apiKeyPermissions)
       .where(eq(apiKeyPermissions.apiKeyId, apiKeyId))
@@ -30,13 +31,16 @@ export class PermissionFilterEngine {
     }
 
     const serverIdsWithAllAccess = new Set<string>();
+    const serverActionTypeAccess = new Set<string>(); // format: `${serverId}:${actionType}`
     const specificToolIds = new Set<string>();
 
     for (const p of perms) {
       if (!p.server_id) continue;
-      if (!p.tool_id) {
+      if (!p.tool_id && !p.action_type) {
         serverIdsWithAllAccess.add(p.server_id);
-      } else {
+      } else if (!p.tool_id && p.action_type) {
+        serverActionTypeAccess.add(`${p.server_id}:${p.action_type}`);
+      } else if (p.tool_id) {
         specificToolIds.add(p.tool_id);
       }
     }
@@ -49,6 +53,7 @@ export class PermissionFilterEngine {
         namespaced_name: mcpTools.namespacedName,
         description: mcpTools.description,
         input_schema_json: mcpTools.inputSchemaJson,
+        action_type: mcpTools.actionType,
         created_at: mcpTools.createdAt,
         server_name: mcpServers.name,
       })
@@ -59,6 +64,9 @@ export class PermissionFilterEngine {
 
     return allTools.filter((t) => {
       if (serverIdsWithAllAccess.has(t.server_id)) {
+        return true;
+      }
+      if (serverActionTypeAccess.has(`${t.server_id}:${t.action_type}`)) {
         return true;
       }
       return specificToolIds.has(t.id);
@@ -75,6 +83,7 @@ export class PermissionFilterEngine {
         id: mcpTools.id,
         server_id: mcpTools.serverId,
         name: mcpTools.name,
+        action_type: mcpTools.actionType,
       })
       .from(mcpTools)
       .where(eq(mcpTools.namespacedName, namespacedName))
@@ -85,7 +94,11 @@ export class PermissionFilterEngine {
     }
 
     const permCheck = db
-      .select({ id: apiKeyPermissions.id, tool_id: apiKeyPermissions.toolId })
+      .select({
+        id: apiKeyPermissions.id,
+        tool_id: apiKeyPermissions.toolId,
+        action_type: apiKeyPermissions.actionType,
+      })
       .from(apiKeyPermissions)
       .where(
         and(
@@ -95,12 +108,80 @@ export class PermissionFilterEngine {
       )
       .all();
 
-    const hasPermission = permCheck.some(
-      (p) => p.tool_id === null || p.tool_id === tool.id
-    );
+    const hasPermission = permCheck.some((p) => {
+      if (!p.tool_id && !p.action_type) return true;
+      if (!p.tool_id && p.action_type === tool.action_type) return true;
+      if (p.tool_id === tool.id) return true;
+      return false;
+    });
 
     if (!hasPermission) {
       throw new Error(`Permission denied: API key does not have access to tool '${namespacedName}'`);
+    }
+
+    return {
+      serverId: tool.server_id,
+      originalToolName: tool.name,
+    };
+  }
+
+  /**
+   * Returns list of tools for a specific server accessible by the given API key.
+   */
+  filterToolsListForServer(apiKeyId: string, serverId: string) {
+    const allowed = this.filterToolsList(apiKeyId);
+    return allowed.filter((t) => t.server_id === serverId);
+  }
+
+  /**
+   * Validates if API key is authorized to call a specific tool on a specific server (by original tool name).
+   */
+  authorizeToolCallForServer(apiKeyId: string, serverId: string, originalToolName: string): AuthorizedToolTarget {
+    const db = getDb();
+    const tool = db
+      .select({
+        id: mcpTools.id,
+        server_id: mcpTools.serverId,
+        name: mcpTools.name,
+        action_type: mcpTools.actionType,
+      })
+      .from(mcpTools)
+      .where(
+        and(
+          eq(mcpTools.serverId, serverId),
+          eq(mcpTools.name, originalToolName)
+        )
+      )
+      .get();
+
+    if (!tool) {
+      throw new Error(`Tool '${originalToolName}' not found on server '${serverId}'`);
+    }
+
+    const permCheck = db
+      .select({
+        id: apiKeyPermissions.id,
+        tool_id: apiKeyPermissions.toolId,
+        action_type: apiKeyPermissions.actionType,
+      })
+      .from(apiKeyPermissions)
+      .where(
+        and(
+          eq(apiKeyPermissions.apiKeyId, apiKeyId),
+          eq(apiKeyPermissions.serverId, serverId),
+        )
+      )
+      .all();
+
+    const hasPermission = permCheck.some((p) => {
+      if (!p.tool_id && !p.action_type) return true;
+      if (!p.tool_id && p.action_type === tool.action_type) return true;
+      if (p.tool_id === tool.id) return true;
+      return false;
+    });
+
+    if (!hasPermission) {
+      throw new Error(`Permission denied: API key does not have access to tool '${originalToolName}'`);
     }
 
     return {
