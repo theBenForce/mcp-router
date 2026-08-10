@@ -1,5 +1,10 @@
 import React, { useState } from "react";
 import { X, Plus, Trash2, HelpCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Checkbox } from "./ui/checkbox";
+import { Alert, AlertDescription } from "./ui/alert";
 
 interface AddPromptModalProps {
   isOpen: boolean;
@@ -96,30 +101,24 @@ export const AddPromptModal: React.FC<AddPromptModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden my-8">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-100 max-w-2xl shadow-2xl p-0 overflow-hidden flex flex-col max-h-[85vh] gap-0">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <DialogHeader className="px-6 py-4 border-b border-zinc-800 flex flex-row items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-zinc-100">Create MCP Prompt</h2>
-            <p className="text-xs text-zinc-400">
+            <DialogTitle className="text-lg font-bold text-zinc-100">Create MCP Prompt</DialogTitle>
+            <p className="text-xs text-zinc-400 mt-0.5">
               Expose reusable templates as slash commands in LLM clients
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
           {error && (
-            <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">
-              {error}
-            </div>
+            <Alert variant="destructive" className="bg-rose-500/10 border-rose-500/20 text-rose-400 font-mono text-xs p-3">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
 
           <div className="grid grid-cols-2 gap-4">
@@ -128,12 +127,12 @@ export const AddPromptModal: React.FC<AddPromptModalProps> = ({
               <label className="block text-xs font-semibold text-zinc-300 mb-1">
                 Prompt Identifier <span className="text-rose-400">*</span>
               </label>
-              <input
+              <Input
                 type="text"
                 placeholder="e.g. code_review"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 font-mono focus:outline-none focus:border-indigo-500"
+                className="bg-zinc-950 border-zinc-800 text-xs text-zinc-100 font-mono focus:border-indigo-500"
                 required
               />
               <p className="text-[11px] text-zinc-500 mt-1">
@@ -146,12 +145,12 @@ export const AddPromptModal: React.FC<AddPromptModalProps> = ({
               <label className="block text-xs font-semibold text-zinc-300 mb-1">
                 Display Title
               </label>
-              <input
+              <Input
                 type="text"
                 placeholder="e.g. Request Code Review"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                className="bg-zinc-950 border-zinc-800 text-xs text-zinc-100 focus:border-indigo-500"
               />
             </div>
           </div>
@@ -161,12 +160,12 @@ export const AddPromptModal: React.FC<AddPromptModalProps> = ({
             <label className="block text-xs font-semibold text-zinc-300 mb-1">
               Description
             </label>
-            <input
+            <Input
               type="text"
               placeholder="e.g. Asks the LLM to analyze code quality and suggest fixes"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+              className="bg-zinc-950 border-zinc-800 text-xs text-zinc-100 focus:border-indigo-500"
             />
           </div>
 
@@ -185,7 +184,7 @@ export const AddPromptModal: React.FC<AddPromptModalProps> = ({
               placeholder="Please review the following {{language}} code:\n\n```{{language}}\n{{code}}\n```"
               value={contentTemplate}
               onChange={(e) => setContentTemplate(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 font-mono focus:outline-none focus:border-indigo-500"
+              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 font-mono focus:outline-none focus:border-indigo-500 resize-none"
               required
             />
           </div>
@@ -196,14 +195,16 @@ export const AddPromptModal: React.FC<AddPromptModalProps> = ({
               <label className="block text-xs font-semibold text-zinc-300">
                 Prompt Arguments ({args.length})
               </label>
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={handleAddArgument}
-                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
+                className="gap-1 text-xs"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Add Argument</span>
-              </button>
+              </Button>
             </div>
 
             {args.map((arg, idx) => (
@@ -211,59 +212,62 @@ export const AddPromptModal: React.FC<AddPromptModalProps> = ({
                 key={idx}
                 className="flex items-center gap-3 p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80"
               >
-                <input
+                <Input
                   type="text"
                   placeholder="Arg Name (e.g. code)"
                   value={arg.name}
                   onChange={(e) => handleArgChange(idx, "name", e.target.value)}
-                  className="w-1/3 px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-100 focus:outline-none focus:border-indigo-500"
+                  className="w-1/3 bg-zinc-900 border-zinc-800 text-xs font-mono text-zinc-100 focus:border-indigo-500 h-8"
                 />
-                <input
+                <Input
                   type="text"
                   placeholder="Description (optional)"
                   value={arg.description}
                   onChange={(e) => handleArgChange(idx, "description", e.target.value)}
-                  className="flex-1 px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                  className="flex-1 bg-zinc-900 border-zinc-800 text-xs text-zinc-100 focus:border-indigo-500 h-8"
                 />
-                <label className="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
+                <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer select-none">
+                  <Checkbox
                     checked={arg.required}
-                    onChange={(e) => handleArgChange(idx, "required", e.target.checked)}
-                    className="rounded bg-zinc-900 border-zinc-800 text-indigo-600 focus:ring-indigo-500"
+                    onCheckedChange={(checked) => handleArgChange(idx, "required", Boolean(checked))}
                   />
                   <span>Required</span>
                 </label>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => handleRemoveArgument(idx)}
-                  className="p-1 rounded text-zinc-500 hover:text-rose-400 transition"
+                  className="h-8 w-8 text-zinc-500 hover:text-rose-400"
                 >
                   <Trash2 className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             ))}
           </div>
 
           {/* Modal Actions */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
+              className="text-zinc-400 hover:text-zinc-200"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              size="sm"
               disabled={loading}
-              className="px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50"
             >
-              {loading ? "Creating..." : "Save Prompt"}
-            </button>
+              {loading ? "Saving..." : "Create Prompt"}
+            </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };

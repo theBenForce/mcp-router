@@ -1,5 +1,9 @@
 import React, { useState } from "react";
-import { X, Key, Copy, Check, ShieldAlert } from "lucide-react";
+import { Key, Copy, Check, ShieldAlert } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Alert, AlertDescription } from "./ui/alert";
 
 interface CreateKeyModalProps {
   isOpen: boolean;
@@ -62,97 +66,96 @@ export const CreateKeyModal: React.FC<CreateKeyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleDone()}>
+      <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-100 max-w-md shadow-2xl p-0 overflow-hidden flex flex-col gap-0">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <DialogHeader className="px-6 py-4 border-b border-zinc-800 flex flex-row items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
               <Key className="h-5 w-5" />
             </div>
-            <h2 className="font-semibold text-lg text-zinc-100">
+            <DialogTitle className="font-semibold text-lg text-zinc-100">
               {createdSecret ? "API Key Generated" : "Create New API Key"}
-            </h2>
+            </DialogTitle>
           </div>
-          <button
-            onClick={handleDone}
-            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Content */}
         {createdSecret ? (
           <div className="p-6 space-y-4">
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-2.5 text-amber-400 text-xs">
-              <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5" />
-              <span>
+            <Alert className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-xs">
+              <ShieldAlert className="h-4 w-4" />
+              <AlertDescription>
                 Please copy your API key now. <strong>It will never be shown again!</strong>
-              </span>
-            </div>
+              </AlertDescription>
+            </Alert>
 
             <div>
               <label className="block text-xs font-medium text-zinc-400 mb-1">Secret Key Token</label>
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 font-mono text-xs text-emerald-400 break-all">
                 <span className="flex-1">{createdSecret}</span>
-                <button
+                <Button
+                  size="icon"
+                  variant="secondary"
                   onClick={copyToClipboard}
-                  className="p-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 shrink-0"
+                  className="h-7 w-7 shrink-0"
                 >
                   {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                </button>
+                </Button>
               </div>
             </div>
 
             <div className="pt-3 border-t border-zinc-800 flex justify-end">
-              <button
+              <Button
                 onClick={handleDone}
-                className="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-md shadow-emerald-600/20"
               >
                 I Have Saved My Key
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             {error && (
-              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">
-                {error}
-              </div>
+              <Alert variant="destructive" className="bg-rose-500/10 border-rose-500/20 text-rose-400 font-mono text-xs p-3">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
 
             <div>
               <label className="block text-xs font-medium text-zinc-300 mb-1">Key Name / Label *</label>
-              <input
+              <Input
                 type="text"
                 required
                 placeholder="e.g. Cursor IDE, Claude Desktop, Production Agent"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-sm text-zinc-100 focus:outline-none focus:border-emerald-500"
+                className="bg-zinc-950 border-zinc-800 text-sm text-zinc-100 focus:border-emerald-500"
               />
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={onClose}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                className="text-zinc-400 hover:text-zinc-200"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
+                size="sm"
                 disabled={loading}
-                className="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 disabled:opacity-50"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-lg shadow-emerald-600/20 disabled:opacity-50"
               >
                 {loading ? "Generating..." : "Generate Key"}
-              </button>
+              </Button>
             </div>
           </form>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
