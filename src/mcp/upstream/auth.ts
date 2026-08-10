@@ -1,3 +1,5 @@
+import { MCPRouterOAuthProvider } from "./oauth-provider";
+
 export interface AuthProvider {
   type: string;
   getHeaders(): Promise<Record<string, string>>;
@@ -42,10 +44,35 @@ export class ApiKeyAuthProvider implements AuthProvider {
   }
 }
 
+export class OAuth2AuthProvider implements AuthProvider {
+  type = "oauth2";
+  private serverId: string;
+
+  constructor(serverId: string) {
+    this.serverId = serverId;
+  }
+
+  async getHeaders(): Promise<Record<string, string>> {
+    const provider = new MCPRouterOAuthProvider({ serverId: this.serverId });
+    const tokens = await provider.tokens();
+    if (tokens?.access_token) {
+      return {
+        Authorization: `Bearer ${tokens.access_token}`,
+      };
+    }
+    return {};
+  }
+}
+
 export function createAuthProvider(
   authType: string,
-  authDataJson?: string | null
+  authDataJson?: string | null,
+  serverId?: string
 ): AuthProvider {
+  if (authType === "oauth2" && serverId) {
+    return new OAuth2AuthProvider(serverId);
+  }
+
   if (!authDataJson || authType === "none") {
     return new NoAuthProvider();
   }

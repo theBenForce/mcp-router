@@ -27,4 +27,9 @@ describe("AuthProvider Strategy", () => {
     expect(provider).toBeInstanceOf(ApiKeyAuthProvider);
     expect(await provider.getHeaders()).toEqual({ "X-Custom-Auth": "key-12345" });
   });
+
+  test("creates OAuth2AuthProvider for authType 'oauth2'", async () => {
+    const provider = createAuthProvider("oauth2", null, "server-123");
+    expect(provider.type).toBe("oauth2");
+  });
 });

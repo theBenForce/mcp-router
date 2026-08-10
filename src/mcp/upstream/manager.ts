@@ -45,7 +45,7 @@ export class UpstreamConnectionManager {
 
     try {
       const config = JSON.parse(server.configJson);
-      const authProvider = createAuthProvider(server.authType, server.authDataJson);
+      const authProvider = createAuthProvider(server.authType, server.authDataJson, serverId);
       const authHeaders = await authProvider.getHeaders();
       const oauthProvider = server.authType === "oauth2" ? new MCPRouterOAuthProvider({ serverId }) : undefined;
 
