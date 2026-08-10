@@ -1,6 +1,7 @@
 import { eq, and, isNull } from "drizzle-orm";
 import { getDb } from "../../db";
-import { apiKeyPermissions, mcpTools, mcpServers } from "../../db/schema";
+import { apiKeyPermissions, mcpTools, mcpServers, mcpPrompts } from "../../db/schema";
+import { promptService } from "../../services/prompt.service";
 
 export interface AuthorizedToolTarget {
   serverId: string;
@@ -32,6 +33,7 @@ export class PermissionFilterEngine {
     const specificToolIds = new Set<string>();
 
     for (const p of perms) {
+      if (!p.server_id) continue;
       if (!p.tool_id) {
         serverIdsWithAllAccess.add(p.server_id);
       } else {
@@ -82,24 +84,6 @@ export class PermissionFilterEngine {
       throw new Error(`Tool '${namespacedName}' not found`);
     }
 
-    // Check if key has permission for this server (all tools) OR this specific tool
-    const perm = db
-      .select({ id: apiKeyPermissions.id })
-      .from(apiKeyPermissions)
-      .where(
-        and(
-          eq(apiKeyPermissions.apiKeyId, apiKeyId),
-          eq(apiKeyPermissions.serverId, tool.server_id),
-        )
-      )
-      .all()
-      .find((p) => {
-        // Re-check: we need to match either tool_id IS NULL (server-level) or tool_id = tool.id
-        // Since the SQL OR with isNull is complex in Drizzle, we fetch matching rows and filter
-        return true; // We already filtered by apiKeyId + serverId
-      });
-
-    // More precise check: verify actual permission exists
     const permCheck = db
       .select({ id: apiKeyPermissions.id, tool_id: apiKeyPermissions.toolId })
       .from(apiKeyPermissions)
@@ -124,6 +108,64 @@ export class PermissionFilterEngine {
       originalToolName: tool.name,
     };
   }
+
+  /**
+   * Returns list of prompts accessible by the given API key.
+   */
+  filterPromptsList(apiKeyId: string) {
+    const db = getDb();
+
+    const perms = db
+      .select({
+        prompt_id: apiKeyPermissions.promptId,
+      })
+      .from(apiKeyPermissions)
+      .where(eq(apiKeyPermissions.apiKeyId, apiKeyId))
+      .all();
+
+    if (perms.length === 0) {
+      return [];
+    }
+
+    const specificPromptIds = new Set<string>();
+    for (const p of perms) {
+      if (p.prompt_id) {
+        specificPromptIds.add(p.prompt_id);
+      }
+    }
+
+    const allPrompts = promptService.listPrompts();
+    return allPrompts.filter((p) => specificPromptIds.has(p.id));
+  }
+
+  /**
+   * Validates if API key is authorized to access a specific prompt.
+   */
+  authorizePromptAccess(apiKeyId: string, promptName: string) {
+    const prompt = promptService.getPromptByName(promptName);
+    if (!prompt) {
+      throw new Error(`Prompt '${promptName}' not found`);
+    }
+
+    const db = getDb();
+    const permCheck = db
+      .select({ id: apiKeyPermissions.id })
+      .from(apiKeyPermissions)
+      .where(
+        and(
+          eq(apiKeyPermissions.apiKeyId, apiKeyId),
+          eq(apiKeyPermissions.promptId, prompt.id),
+        )
+      )
+      .get();
+
+    if (!permCheck) {
+      throw new Error(`Permission denied: API key does not have access to prompt '${promptName}'`);
+    }
+
+    return prompt;
+  }
 }
 
 export const filterEngine = new PermissionFilterEngine();
+

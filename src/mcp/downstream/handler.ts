@@ -11,11 +11,31 @@ const app = new Hono();
 app.use("/mcp", downstreamAuthMiddleware);
 app.use("/sse", downstreamAuthMiddleware);
 
+import { promptService } from "../../services/prompt.service";
+
 /**
  * Handle JSON-RPC request for MCP
  */
 async function handleJsonRpc(apiKey: any, body: any) {
   const { id, method, params } = body;
+
+  if (method === "initialize") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: {
+        protocolVersion: "2024-11-05",
+        capabilities: {
+          tools: {},
+          prompts: {},
+        },
+        serverInfo: {
+          name: "mcp-router",
+          version: "1.0.0",
+        },
+      },
+    };
+  }
 
   if (method === "tools/list") {
     const allowedTools = filterEngine.filterToolsList(apiKey.id);
@@ -76,6 +96,55 @@ async function handleJsonRpc(apiKey: any, body: any) {
         id,
         error: {
           code: isPermissionDenied ? -32001 : -32603,
+          message: err.message,
+        },
+      };
+    }
+  }
+
+  if (method === "prompts/list") {
+    const allowedPrompts = filterEngine.filterPromptsList(apiKey.id);
+    const mcpPrompts = allowedPrompts.map((p: any) => ({
+      name: p.name,
+      title: p.title || undefined,
+      description: p.description || undefined,
+      arguments: p.arguments.map((a: any) => ({
+        name: a.name,
+        description: a.description || undefined,
+        required: a.required || undefined,
+      })),
+    }));
+
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: { prompts: mcpPrompts },
+    };
+  }
+
+  if (method === "prompts/get") {
+    const promptName = params?.name;
+    const args = params?.arguments || {};
+
+    try {
+      filterEngine.authorizePromptAccess(apiKey.id, promptName);
+      const rendered = promptService.renderPrompt(promptName, args);
+
+      return {
+        jsonrpc: "2.0",
+        id,
+        result: rendered,
+      };
+    } catch (err: any) {
+      const isPermissionDenied = err.message?.includes("Permission denied");
+      const isNotFoundOrMissingArg =
+        err.message?.includes("not found") || err.message?.includes("Missing required argument");
+
+      return {
+        jsonrpc: "2.0",
+        id,
+        error: {
+          code: isPermissionDenied ? -32001 : isNotFoundOrMissingArg ? -32602 : -32603,
           message: err.message,
         },
       };
