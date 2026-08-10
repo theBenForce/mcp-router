@@ -17,15 +17,15 @@ RUN apk add --no-cache curl
 COPY package.json bun.lock* ./
 RUN bun install --production
 
-COPY tsconfig.json ./
+COPY tsconfig.json drizzle.config.ts ./
 COPY src ./src
 COPY --from=web-builder /app/web/dist ./public
 
 RUN mkdir -p /data
 
-EXPOSE 3000
+EXPOSE 3001
 
-ENV PORT=3000
+ENV PORT=3001
 ENV HOST=0.0.0.0
 ENV DATABASE_PATH=/data/mcp_router.db
 ENV PUBLIC_DIR=/app/public
