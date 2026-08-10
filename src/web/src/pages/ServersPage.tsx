@@ -291,13 +291,15 @@ export const ServersPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Docker-specific details */}
-              {selectedServer.transport_type === "docker" && selectedServer.config && (
+              {/* Sidecar / Docker container details */}
+              {(selectedServer.transport_type === "docker" || selectedServer.transport_type === "stdio") && selectedServer.config && (
                 <div className="space-y-2 p-3 rounded-lg bg-zinc-950/40 border border-zinc-800/60">
-                  <div>
-                    <span className="text-zinc-500 block mb-1 text-xs">Docker Image</span>
-                    <span className="font-mono text-zinc-200 text-xs">{selectedServer.config.image}</span>
-                  </div>
+                  {selectedServer.config.image && (
+                    <div>
+                      <span className="text-zinc-500 block mb-1 text-xs">Docker Image</span>
+                      <span className="font-mono text-zinc-200 text-xs">{selectedServer.config.image}</span>
+                    </div>
+                  )}
                   {selectedServer.config.env && Object.keys(selectedServer.config.env).length > 0 && (
                     <div>
                       <span className="text-zinc-500 block mb-1 text-xs">Environment Variables</span>
@@ -307,6 +309,24 @@ export const ServersPage: React.FC = () => {
                             <span className="text-indigo-400">{k}</span>=<span className="text-zinc-400">{v as string}</span>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+                  {selectedServer.config.volumes && Array.isArray(selectedServer.config.volumes) && selectedServer.config.volumes.length > 0 && (
+                    <div>
+                      <span className="text-zinc-500 block mb-1 text-xs">Volume Mappings</span>
+                      <div className="space-y-1">
+                        {selectedServer.config.volumes.map((vStr: string, idx: number) => {
+                          const [h, ...cParts] = vStr.split(":");
+                          const c = cParts.join(":");
+                          return (
+                            <div key={idx} className="font-mono text-xs text-zinc-300">
+                              <span className="text-cyan-400">{h}</span>
+                              <span className="text-zinc-500"> ➔ </span>
+                              <span className="text-zinc-400">{c || h}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

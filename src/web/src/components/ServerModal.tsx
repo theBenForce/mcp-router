@@ -23,6 +23,7 @@ function parseDockerRunCommand(cmd: string) {
   if (tokens[i] === "run") i++;
 
   const env: { key: string; value: string }[] = [];
+  const volumes: { hostPath: string; containerPath: string }[] = [];
   let image = "";
 
   while (i < tokens.length) {
@@ -33,9 +34,19 @@ function parseDockerRunCommand(cmd: string) {
         const [k, ...vParts] = tokens[i].split("=");
         env.push({ key: k, value: vParts.join("=") });
       }
+    } else if (t === "-v" || t === "--volume") {
+      i++;
+      if (i < tokens.length) {
+        const parts = tokens[i].split(":");
+        if (parts.length >= 2) {
+          volumes.push({ hostPath: parts[0], containerPath: parts.slice(1).join(":") });
+        } else {
+          volumes.push({ hostPath: tokens[i], containerPath: tokens[i] });
+        }
+      }
     } else if (t.startsWith("-")) {
       if (
-        t === "-v" || t === "-p" || t === "--name" || t === "--volume" ||
+        t === "-p" || t === "--name" ||
         t === "--network" || t === "--publish" || t === "--user" || t === "--workdir"
       ) {
         i++; // skip value
@@ -51,7 +62,7 @@ function parseDockerRunCommand(cmd: string) {
   const basename = parts[parts.length - 1]?.split(":")[0]?.split("@")[0] || "";
   const inferredName = basename.replace(/^mcp[-_]/, "");
 
-  return { image, env, inferredName };
+  return { image, env, volumes, inferredName };
 }
 
 export const ServerModal: React.FC<ServerModalProps> = ({
@@ -74,10 +85,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   // Remote (SSE / HTTP) fields
   const [url, setUrl] = useState("");
 
-  // Docker fields
+  // Docker / Sidecar shared fields
   const [rawCommand, setRawCommand] = useState("");
   const [dockerImage, setDockerImage] = useState("");
   const [envVars, setEnvVars] = useState<{ key: string; value: string }[]>([]);
+  const [volumes, setVolumes] = useState<{ hostPath: string; containerPath: string }[]>([]);
 
   // Auth fields
   const [authType, setAuthType] = useState<"none" | "bearer" | "api_key" | "oauth2">("none");
@@ -109,10 +121,29 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         ? JSON.parse(server.auth_data_json)
         : {};
 
+      const parseVolumes = (vList: any) => {
+        if (Array.isArray(vList)) {
+          return vList.map((vStr: string) => {
+            const parts = String(vStr).split(":");
+            if (parts.length >= 2) {
+              return { hostPath: parts[0], containerPath: parts.slice(1).join(":") };
+            }
+            return { hostPath: String(vStr), containerPath: String(vStr) };
+          });
+        }
+        return [];
+      };
+
       if (tType === "stdio") {
         setCommand(cfg.command || "npx");
         setArgsStr(Array.isArray(cfg.args) ? cfg.args.join(" ") : cfg.args || "");
         setImage(cfg.image || "");
+        if (cfg.env && typeof cfg.env === "object") {
+          setEnvVars(Object.entries(cfg.env).map(([k, v]) => ({ key: k, value: String(v) })));
+        } else {
+          setEnvVars([]);
+        }
+        setVolumes(parseVolumes(cfg.volumes));
       } else if (tType === "docker") {
         setRawCommand(cfg.rawCommand || "");
         setDockerImage(cfg.image || "");
@@ -121,6 +152,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         } else {
           setEnvVars([]);
         }
+        setVolumes(parseVolumes(cfg.volumes));
       } else {
         setUrl(cfg.url || "");
       }
@@ -145,6 +177,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       setRawCommand("");
       setDockerImage("");
       setEnvVars([]);
+      setVolumes([]);
       setAuthType("none");
       setBearerToken("");
       setApiKey("");
@@ -161,6 +194,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       const parsed = parseDockerRunCommand(value);
       setDockerImage(parsed.image);
       setEnvVars(parsed.env);
+      setVolumes(parsed.volumes);
       if (!name && parsed.inferredName) {
         setName(parsed.inferredName);
       }
@@ -175,16 +209,32 @@ export const ServerModal: React.FC<ServerModalProps> = ({
     try {
       let config: Record<string, unknown> = {};
 
+      const volumeStrs: string[] = [];
+      for (const vol of volumes) {
+        if (vol.hostPath.trim() && vol.containerPath.trim()) {
+          volumeStrs.push(`${vol.hostPath.trim()}:${vol.containerPath.trim()}`);
+        }
+      }
+
       if (transportType === "stdio") {
         const args = argsStr
           .trim()
           .split(" ")
           .filter((a) => a.length > 0);
 
+        const envObj: Record<string, string> = {};
+        for (const ev of envVars) {
+          if (ev.key.trim()) {
+            envObj[ev.key.trim()] = ev.value;
+          }
+        }
+
         config = {
           command: command.trim(),
           args,
           ...(image.trim() ? { image: image.trim() } : {}),
+          ...(Object.keys(envObj).length > 0 ? { env: envObj } : {}),
+          ...(volumeStrs.length > 0 ? { volumes: volumeStrs } : {}),
         };
       } else if (transportType === "docker") {
         const envObj: Record<string, string> = {};
@@ -197,6 +247,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
           image: dockerImage.trim(),
           env: envObj,
           ...(rawCommand.trim() ? { rawCommand: rawCommand.trim() } : {}),
+          ...(volumeStrs.length > 0 ? { volumes: volumeStrs } : {}),
         };
       } else {
         config = {
@@ -377,11 +428,129 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                 <label className="block text-xs font-medium text-zinc-300 mb-1">Custom Docker Image (Optional)</label>
                 <Input
                   type="text"
-                  placeholder="Defaults to node:22-alpine or python:3.12-slim"
+                  placeholder="Defaults to node:22-alpine or ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
                   value={image}
                   onChange={(e) => setImage(e.target.value)}
                   className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
                 />
+              </div>
+
+              {/* Environment Variables */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-zinc-300">Environment Variables</label>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    onClick={() => setEnvVars([...envVars, { key: "", value: "" }])}
+                    className="h-auto p-0 text-[11px] text-indigo-400 hover:text-indigo-300 gap-1"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Add</span>
+                  </Button>
+                </div>
+                {envVars.length === 0 ? (
+                  <p className="text-[11px] text-zinc-500 font-mono">No environment variables set</p>
+                ) : (
+                  <div className="space-y-2">
+                    {envVars.map((ev, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <Input
+                          type="text"
+                          placeholder="KEY"
+                          value={ev.key}
+                          onChange={(e) => {
+                            const updated = [...envVars];
+                            updated[idx].key = e.target.value;
+                            setEnvVars(updated);
+                          }}
+                          className="flex-1 bg-zinc-900 border-zinc-800 text-xs font-mono text-zinc-100 focus:border-indigo-500 h-8"
+                        />
+                        <span className="text-zinc-600 text-xs">=</span>
+                        <Input
+                          type="text"
+                          placeholder="value"
+                          value={ev.value}
+                          onChange={(e) => {
+                            const updated = [...envVars];
+                            updated[idx].value = e.target.value;
+                            setEnvVars(updated);
+                          }}
+                          className="flex-1 bg-zinc-900 border-zinc-800 text-xs font-mono text-zinc-100 focus:border-indigo-500 h-8"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEnvVars(envVars.filter((_, i) => i !== idx))}
+                          className="h-7 w-7 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Volume Mappings */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-zinc-300">Volume Mappings</label>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    onClick={() => setVolumes([...volumes, { hostPath: "", containerPath: "" }])}
+                    className="h-auto p-0 text-[11px] text-indigo-400 hover:text-indigo-300 gap-1"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Add Volume</span>
+                  </Button>
+                </div>
+                {volumes.length === 0 ? (
+                  <p className="text-[11px] text-zinc-500 font-mono">No volume mappings configured</p>
+                ) : (
+                  <div className="space-y-2">
+                    {volumes.map((vol, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <Input
+                          type="text"
+                          placeholder="/host/path"
+                          value={vol.hostPath}
+                          onChange={(e) => {
+                            const updated = [...volumes];
+                            updated[idx].hostPath = e.target.value;
+                            setVolumes(updated);
+                          }}
+                          className="flex-1 bg-zinc-900 border-zinc-800 text-xs font-mono text-zinc-100 focus:border-indigo-500 h-8"
+                        />
+                        <span className="text-zinc-600 text-xs">:</span>
+                        <Input
+                          type="text"
+                          placeholder="/container/path"
+                          value={vol.containerPath}
+                          onChange={(e) => {
+                            const updated = [...volumes];
+                            updated[idx].containerPath = e.target.value;
+                            setVolumes(updated);
+                          }}
+                          className="flex-1 bg-zinc-900 border-zinc-800 text-xs font-mono text-zinc-100 focus:border-indigo-500 h-8"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setVolumes(volumes.filter((_, i) => i !== idx))}
+                          className="h-7 w-7 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : transportType === "docker" ? (
@@ -465,6 +634,65 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                           variant="ghost"
                           size="icon"
                           onClick={() => setEnvVars(envVars.filter((_, i) => i !== idx))}
+                          className="h-7 w-7 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Volume Mappings */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-zinc-300">Volume Mappings</label>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    onClick={() => setVolumes([...volumes, { hostPath: "", containerPath: "" }])}
+                    className="h-auto p-0 text-[11px] text-cyan-400 hover:text-cyan-300 gap-1"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Add Volume</span>
+                  </Button>
+                </div>
+                {volumes.length === 0 ? (
+                  <p className="text-[11px] text-zinc-500 font-mono">No volume mappings configured</p>
+                ) : (
+                  <div className="space-y-2">
+                    {volumes.map((vol, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <Input
+                          type="text"
+                          placeholder="/host/path"
+                          value={vol.hostPath}
+                          onChange={(e) => {
+                            const updated = [...volumes];
+                            updated[idx].hostPath = e.target.value;
+                            setVolumes(updated);
+                          }}
+                          className="flex-1 bg-zinc-900 border-zinc-800 text-xs font-mono text-zinc-100 focus:border-cyan-500 h-8"
+                        />
+                        <span className="text-zinc-600 text-xs">:</span>
+                        <Input
+                          type="text"
+                          placeholder="/container/path"
+                          value={vol.containerPath}
+                          onChange={(e) => {
+                            const updated = [...volumes];
+                            updated[idx].containerPath = e.target.value;
+                            setVolumes(updated);
+                          }}
+                          className="flex-1 bg-zinc-900 border-zinc-800 text-xs font-mono text-zinc-100 focus:border-cyan-500 h-8"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setVolumes(volumes.filter((_, i) => i !== idx))}
                           className="h-7 w-7 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
