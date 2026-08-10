@@ -67,15 +67,18 @@ describe("Downstream MCP Proxy & Permission Filter", () => {
     const serverId = crypto.randomUUID();
     const toolId = crypto.randomUUID();
 
+    const serverName = `srv-denied-${serverId.slice(0, 8)}`;
+    const namespacedName = `${serverName}__calc`;
+
     rawDb.query(`
       INSERT INTO mcp_servers (id, name, transport_type, config_json, status)
-      VALUES (?, 'srv-denied', 'sse', '{}', 'connected')
-    `).run(serverId);
+      VALUES (?, ?, 'sse', '{}', 'connected')
+    `).run(serverId, serverName);
 
     rawDb.query(`
       INSERT INTO mcp_tools (id, server_id, name, namespaced_name, description, input_schema_json)
-      VALUES (?, ?, 'calc', 'srv-denied__calc', 'Calculator tool', '{}')
-    `).run(toolId, serverId);
+      VALUES (?, ?, 'calc', ?, 'Calculator tool', '{}')
+    `).run(toolId, serverId, namespacedName);
 
     // Key with NO permissions
     const keyNoPerm = keyService.createKey({ name: "Unprivileged Key" });
@@ -91,7 +94,7 @@ describe("Downstream MCP Proxy & Permission Filter", () => {
           jsonrpc: "2.0",
           id: 2,
           method: "tools/call",
-          params: { name: "srv-denied__calc", arguments: {} },
+          params: { name: namespacedName, arguments: {} },
         }),
       })
     );
