@@ -1,11 +1,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { eq, and, notInArray, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { mcpServers, mcpTools } from "../../db/schema";
 import { createAuthProvider } from "./auth";
+import { DockerTransport } from "./docker-transport";
+import { parseDockerCommand } from "./docker-parser";
 import { sidecarManager } from "./sidecar";
 
 export interface ActiveServerConnection {
@@ -48,27 +49,46 @@ export class UpstreamConnectionManager {
       let transport: Transport;
       let stopSidecar: (() => Promise<void>) | undefined;
 
-      if (server.transportType === "stdio") {
-        // Spawn Docker sidecar for stdio servers
-        const sidecar = await sidecarManager.spawnSidecar(serverId, {
-          image: config.image,
-          command: config.command,
-          args: config.args,
-          env: { ...config.env, ...authHeaders },
-        });
+      if (server.transportType === "stdio" || server.transportType === "docker") {
+        // Both stdio and docker use the Docker sidecar + DockerTransport
+        // For docker: config may have rawCommand that needs parsing
+        let sidecarConfig: {
+          image?: string;
+          command?: string;
+          args?: string[];
+          env?: Record<string, string>;
+          volumes?: string[];
+        };
 
+        if (server.transportType === "docker" && config.rawCommand) {
+          // Parse the raw docker run command
+          const parsed = parseDockerCommand(config.rawCommand);
+          sidecarConfig = {
+            image: parsed.image,
+            command: parsed.command,
+            args: parsed.args,
+            env: { ...parsed.env, ...authHeaders },
+            volumes: parsed.volumes,
+          };
+        } else {
+          sidecarConfig = {
+            image: config.image,
+            command: config.command,
+            args: config.args,
+            env: { ...config.env, ...authHeaders },
+            volumes: config.volumes,
+          };
+        }
+
+        const sidecar = await sidecarManager.spawnSidecar(serverId, sidecarConfig);
         stopSidecar = sidecar.stop;
 
-        // Custom StdioClientTransport wrapping sidecar stream pipes
-        transport = new StdioClientTransport({
-          command: config.command,
-          args: config.args,
-          env: config.env,
+        // Use DockerTransport for proper stdio communication with the container
+        transport = new DockerTransport({
+          readable: sidecar.readable,
+          writable: sidecar.writable,
+          stop: sidecar.stop,
         });
-
-        // Override reader/writer streams with sidecar streams
-        (transport as any)._readStream = sidecar.readable;
-        (transport as any)._writeStream = sidecar.writable;
       } else if (server.transportType === "sse") {
         const url = new URL(config.url);
         transport = new SSEClientTransport(url, {
