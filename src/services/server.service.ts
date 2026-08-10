@@ -107,8 +107,11 @@ export class ServerService {
       })
       .run();
 
-    // Attempt connection
-    await upstreamManager.connectServer(id);
+    // Attempt connection in the background — don't block the API response
+    // while Docker pulls images and waits for MCP handshake
+    upstreamManager.connectServer(id).catch((err) => {
+      console.error(`[ServerService] Background connection failed for ${id}:`, err.message);
+    });
 
     return this.getServer(id);
   }
@@ -138,8 +141,10 @@ export class ServerService {
       .where(eq(mcpServers.id, id))
       .run();
 
-    // Reconnect with updated configuration
-    await upstreamManager.connectServer(id);
+    // Reconnect with updated configuration in the background
+    upstreamManager.connectServer(id).catch((err) => {
+      console.error(`[ServerService] Background reconnect failed for ${id}:`, err.message);
+    });
 
     return this.getServer(id);
   }
