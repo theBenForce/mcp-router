@@ -174,4 +174,48 @@ describe("Per-Server Proxy & Dedicated Prompts Endpoints", () => {
     expect(listBody.result.prompts.length).toBe(1);
     expect(listBody.result.prompts[0].name).toBe("code_review_prompt");
   });
+
+  test("responds to ping and notifications/initialized cleanly", async () => {
+    const key = keyService.createKey({ name: "Ping Key" });
+
+    // 1. Ping
+    const pingRes = await app.fetch(
+      new Request("http://localhost/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key.secretKey}`,
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 99, method: "ping" }),
+      })
+    );
+    expect(pingRes.status).toBe(200);
+    const pingBody = await pingRes.json();
+    expect(pingBody.result).toBeDefined();
+
+    // 2. Notifications
+    const notifRes = await app.fetch(
+      new Request("http://localhost/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key.secretKey}`,
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+      })
+    );
+    expect(notifRes.status).toBe(200);
+  });
+
+  test("GET /mcp/servers/:serverId/sse preserves auth key in endpoint event payload", async () => {
+    const serverId = crypto.randomUUID();
+    const key = keyService.createKey({ name: "SSE Key" });
+
+    const sseRes = await app.fetch(
+      new Request(`http://localhost/mcp/servers/${serverId}/sse?key=${key.secretKey}`)
+    );
+    expect(sseRes.status).toBe(200);
+    const text = await sseRes.text();
+    expect(text).toContain(`data: /mcp/servers/${serverId}?key=${key.secretKey}`);
+  });
 });

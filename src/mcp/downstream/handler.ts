@@ -16,10 +16,41 @@ app.use("/sse", downstreamAuthMiddleware);
 app.use("/sse/*", downstreamAuthMiddleware);
 
 /**
+ * Extract query parameters from request URL to preserve auth token in SSE endpoint events
+ */
+function getQueryString(c: any): string {
+  const rawUrl = c.req.raw?.url || c.req.url || "";
+  const qIdx = rawUrl.indexOf("?");
+  if (qIdx !== -1) {
+    return rawUrl.substring(qIdx);
+  }
+  const keyParam = c.req.query("key") || c.req.query("apiKey");
+  return keyParam ? `?key=${keyParam}` : "";
+}
+
+/**
  * Handle JSON-RPC requests for MCP endpoints
  */
 async function handleJsonRpc(apiKey: any, body: any, targetServerId?: string) {
   const { id, method, params } = body;
+
+  // 1. Standard Protocol Ping (used by Zed, AGY, Cursor, etc. to check server liveness)
+  if (method === "ping") {
+    return {
+      jsonrpc: "2.0",
+      id,
+      result: {},
+    };
+  }
+
+  // 2. Standard Protocol Notifications (e.g. notifications/initialized)
+  if (method === "notifications/initialized" || method?.startsWith("notifications/")) {
+    return {
+      jsonrpc: "2.0",
+      ...(id !== undefined ? { id } : {}),
+      result: {},
+    };
+  }
 
   // ----------------------------------------------------
   // Dedicated Prompts Endpoint (/mcp/servers/prompts)
@@ -303,55 +334,45 @@ async function handleJsonRpc(apiKey: any, body: any, targetServerId?: string) {
 }
 
 // ----------------------------------------------------
-// Streamable HTTP Endpoints (POST)
+// Streamable HTTP & POST Endpoints
 // ----------------------------------------------------
 
-// 1. Root aggregated router (POST /mcp)
-app.post("/mcp", async (c) => {
+async function processPostRequest(c: any, targetServerId?: string) {
   const apiKey = c.get("apiKey");
   try {
     const body = await c.req.json();
-    const response = await handleJsonRpc(apiKey, body);
+    const response = await handleJsonRpc(apiKey, body, targetServerId);
     return c.json(response);
   } catch (err: any) {
     return c.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, 400);
   }
-});
+}
 
-// 2. Dedicated Prompts Endpoint (POST /mcp/servers/prompts)
-app.post("/mcp/servers/prompts", async (c) => {
-  const apiKey = c.get("apiKey");
-  try {
-    const body = await c.req.json();
-    const response = await handleJsonRpc(apiKey, body, "prompts");
-    return c.json(response);
-  } catch (err: any) {
-    return c.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, 400);
-  }
-});
+// 1. Root aggregated router POST endpoints
+app.post("/mcp", (c) => processPostRequest(c));
+app.post("/sse", (c) => processPostRequest(c));
+app.post("/mcp/sse", (c) => processPostRequest(c));
 
-// 3. Per-Server Proxy Endpoint (POST /mcp/servers/:serverId)
-app.post("/mcp/servers/:serverId", async (c) => {
-  const apiKey = c.get("apiKey");
-  const serverId = c.req.param("serverId");
-  try {
-    const body = await c.req.json();
-    const response = await handleJsonRpc(apiKey, body, serverId);
-    return c.json(response);
-  } catch (err: any) {
-    return c.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, 400);
-  }
-});
+// 2. Dedicated Prompts POST endpoints
+app.post("/mcp/servers/prompts", (c) => processPostRequest(c, "prompts"));
+app.post("/mcp/servers/prompts/sse", (c) => processPostRequest(c, "prompts"));
+app.post("/sse/servers/prompts", (c) => processPostRequest(c, "prompts"));
+
+// 3. Per-Server Proxy POST endpoints
+app.post("/mcp/servers/:serverId", (c) => processPostRequest(c, c.req.param("serverId")));
+app.post("/mcp/servers/:serverId/sse", (c) => processPostRequest(c, c.req.param("serverId")));
+app.post("/sse/servers/:serverId", (c) => processPostRequest(c, c.req.param("serverId")));
 
 // ----------------------------------------------------
-// Server-Sent Events Endpoints (GET /sse)
+// Server-Sent Events Endpoints (GET)
 // ----------------------------------------------------
 
 // 1. Root SSE (GET /sse or GET /mcp/sse)
 const handleRootSse = (c: any) => {
   const apiKey = c.get("apiKey");
+  const qs = getQueryString(c);
   return streamSSE(c, async (stream) => {
-    await stream.writeSSE({ event: "endpoint", data: "/mcp" });
+    await stream.writeSSE({ event: "endpoint", data: `/mcp${qs}` });
     stream.onAbort(() => {
       console.log(`[SSE] Client with key ${apiKey.name} disconnected from root /mcp`);
     });
@@ -363,8 +384,9 @@ app.get("/mcp/sse", handleRootSse);
 // 2. Dedicated Prompts SSE (GET /mcp/servers/prompts/sse or GET /sse/servers/prompts)
 const handlePromptsSse = (c: any) => {
   const apiKey = c.get("apiKey");
+  const qs = getQueryString(c);
   return streamSSE(c, async (stream) => {
-    await stream.writeSSE({ event: "endpoint", data: "/mcp/servers/prompts" });
+    await stream.writeSSE({ event: "endpoint", data: `/mcp/servers/prompts${qs}` });
     stream.onAbort(() => {
       console.log(`[SSE] Client with key ${apiKey.name} disconnected from prompts server`);
     });
@@ -377,8 +399,9 @@ app.get("/sse/servers/prompts", handlePromptsSse);
 const handleServerSse = (c: any) => {
   const apiKey = c.get("apiKey");
   const serverId = c.req.param("serverId");
+  const qs = getQueryString(c);
   return streamSSE(c, async (stream) => {
-    await stream.writeSSE({ event: "endpoint", data: `/mcp/servers/${serverId}` });
+    await stream.writeSSE({ event: "endpoint", data: `/mcp/servers/${serverId}${qs}` });
     stream.onAbort(() => {
       console.log(`[SSE] Client with key ${apiKey.name} disconnected from server ${serverId}`);
     });
