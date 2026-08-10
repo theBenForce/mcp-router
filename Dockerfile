@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile using Bun exclusively
 
 # Stage 1: Build Frontend SPA using Bun
-FROM oven/bun:1.1-alpine AS web-builder
+FROM oven/bun:alpine AS web-builder
 WORKDIR /app/web
 COPY src/web/package.json ./
 RUN bun install
@@ -9,7 +9,7 @@ COPY src/web ./
 RUN bun run build
 
 # Stage 2: Production Bun Runtime
-FROM oven/bun:1.1-alpine AS runner
+FROM oven/bun:alpine AS runner
 WORKDIR /app
 
 RUN apk add --no-cache curl
