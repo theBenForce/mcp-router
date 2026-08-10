@@ -1,10 +1,52 @@
 import React, { useState } from "react";
-import { X, Server, Terminal, Globe, Key, Shield } from "lucide-react";
+import { X, Server, Terminal, Globe, Container, Key, Shield, Plus, Trash2 } from "lucide-react";
 
 interface AddServerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+}
+
+/**
+ * Minimal docker run command parser for the frontend.
+ * Extracts image, env vars, and inferred name from a docker run command string.
+ */
+function parseDockerRunCommand(cmd: string) {
+  const tokens = cmd.trim().split(/\s+/);
+  let i = 0;
+  if (tokens[0] === "docker") i++;
+  if (tokens[i] === "run") i++;
+
+  const env: { key: string; value: string }[] = [];
+  let image = "";
+
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (t === "-e" || t === "--env") {
+      i++;
+      if (i < tokens.length) {
+        const [k, ...vParts] = tokens[i].split("=");
+        env.push({ key: k, value: vParts.join("=") });
+      }
+    } else if (t.startsWith("-")) {
+      if (
+        t === "-v" || t === "-p" || t === "--name" || t === "--volume" ||
+        t === "--network" || t === "--publish" || t === "--user" || t === "--workdir"
+      ) {
+        i++; // skip value
+      }
+    } else {
+      image = t;
+      break;
+    }
+    i++;
+  }
+
+  const parts = image.split("/");
+  const basename = parts[parts.length - 1]?.split(":")[0]?.split("@")[0] || "";
+  const inferredName = basename.replace(/^mcp[-_]/, "");
+
+  return { image, env, inferredName };
 }
 
 export const AddServerModal: React.FC<AddServerModalProps> = ({
@@ -14,7 +56,7 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
 }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [transportType, setTransportType] = useState<"stdio" | "sse">("stdio");
+  const [transportType, setTransportType] = useState<"stdio" | "docker" | "sse">("stdio");
 
   // Stdio fields
   const [command, setCommand] = useState("npx");
@@ -23,6 +65,11 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
 
   // SSE fields
   const [url, setUrl] = useState("");
+
+  // Docker fields
+  const [rawCommand, setRawCommand] = useState("");
+  const [dockerImage, setDockerImage] = useState("");
+  const [envVars, setEnvVars] = useState<{ key: string; value: string }[]>([]);
 
   // Auth fields
   const [authType, setAuthType] = useState<"none" | "bearer" | "api_key">("none");
@@ -34,6 +81,18 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleRawCommandChange = (value: string) => {
+    setRawCommand(value);
+    if (value.trim()) {
+      const parsed = parseDockerRunCommand(value);
+      setDockerImage(parsed.image);
+      setEnvVars(parsed.env);
+      if (!name && parsed.inferredName) {
+        setName(parsed.inferredName);
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +112,18 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
           command: command.trim(),
           args,
           ...(image.trim() ? { image: image.trim() } : {}),
+        };
+      } else if (transportType === "docker") {
+        const envObj: Record<string, string> = {};
+        for (const ev of envVars) {
+          if (ev.key.trim()) {
+            envObj[ev.key.trim()] = ev.value;
+          }
+        }
+        config = {
+          image: dockerImage.trim(),
+          env: envObj,
+          ...(rawCommand.trim() ? { rawCommand: rawCommand.trim() } : {}),
         };
       } else {
         config = {
@@ -148,30 +219,42 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
           {/* Transport Type Select */}
           <div>
             <label className="block text-xs font-medium text-zinc-300 mb-1.5">Transport Type *</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setTransportType("stdio")}
-                className={`flex items-center justify-center gap-2 p-3 rounded-lg border text-sm font-medium transition-all ${
+                className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg border text-xs font-medium transition-all ${
                   transportType === "stdio"
                     ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-400"
                     : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
                 }`}
               >
-                <Terminal className="h-4 w-4" />
-                <span>Stdio (Docker Sidecar)</span>
+                <Terminal className="h-3.5 w-3.5" />
+                <span>Stdio Sidecar</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransportType("docker")}
+                className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg border text-xs font-medium transition-all ${
+                  transportType === "docker"
+                    ? "bg-cyan-500/10 border-cyan-500/50 text-cyan-400"
+                    : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <Container className="h-3.5 w-3.5" />
+                <span>Docker Container</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTransportType("sse")}
-                className={`flex items-center justify-center gap-2 p-3 rounded-lg border text-sm font-medium transition-all ${
+                className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg border text-xs font-medium transition-all ${
                   transportType === "sse"
                     ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-400"
                     : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
                 }`}
               >
-                <Globe className="h-4 w-4" />
-                <span>HTTP / SSE Endpoint</span>
+                <Globe className="h-3.5 w-3.5" />
+                <span>HTTP / SSE</span>
               </button>
             </div>
           </div>
@@ -211,6 +294,93 @@ export const AddServerModal: React.FC<AddServerModalProps> = ({
                   onChange={(e) => setImage(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-mono text-zinc-100 focus:outline-none focus:border-indigo-500"
                 />
+              </div>
+            </div>
+          ) : transportType === "docker" ? (
+            <div className="space-y-3 p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
+              {/* Quick Import */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Quick Import — Paste docker run command
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="docker run -i --rm -e KEY=VALUE ghcr.io/org/image:tag"
+                  value={rawCommand}
+                  onChange={(e) => handleRawCommandChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-mono text-zinc-100 focus:outline-none focus:border-cyan-500 resize-none"
+                />
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Paste a full docker run command to auto-fill fields below
+                </p>
+              </div>
+
+              {/* Docker Image */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">Docker Image *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ghcr.io/org/mcp-server:latest"
+                  value={dockerImage}
+                  onChange={(e) => setDockerImage(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-mono text-zinc-100 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {/* Environment Variables */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-zinc-300">Environment Variables</label>
+                  <button
+                    type="button"
+                    onClick={() => setEnvVars([...envVars, { key: "", value: "" }])}
+                    className="flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Add</span>
+                  </button>
+                </div>
+                {envVars.length === 0 ? (
+                  <p className="text-[11px] text-zinc-500 font-mono">No environment variables set</p>
+                ) : (
+                  <div className="space-y-2">
+                    {envVars.map((ev, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="KEY"
+                          value={ev.key}
+                          onChange={(e) => {
+                            const updated = [...envVars];
+                            updated[idx].key = e.target.value;
+                            setEnvVars(updated);
+                          }}
+                          className="flex-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-100 focus:outline-none focus:border-cyan-500"
+                        />
+                        <span className="text-zinc-600 text-xs">=</span>
+                        <input
+                          type="text"
+                          placeholder="value"
+                          value={ev.value}
+                          onChange={(e) => {
+                            const updated = [...envVars];
+                            updated[idx].value = e.target.value;
+                            setEnvVars(updated);
+                          }}
+                          className="flex-1 px-2 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-100 focus:outline-none focus:border-cyan-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setEnvVars(envVars.filter((_, i) => i !== idx))}
+                          className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

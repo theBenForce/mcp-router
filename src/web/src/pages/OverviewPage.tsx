@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Server, Key, Wrench, Activity, CheckCircle, AlertTriangle, ArrowRight } from "lucide-react";
+import { Server, Key, Wrench, Activity, CheckCircle, AlertTriangle, ArrowRight, Container } from "lucide-react";
 
 interface OverviewPageProps {
   onNavigate: (tab: "servers" | "keys" | "audit") => void;
@@ -123,7 +123,13 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
                     )}
                     <div>
                       <div className="font-medium text-xs text-zinc-200">{server.name}</div>
-                      <div className="text-[11px] text-zinc-500 font-mono">{server.transport_type}</div>
+                    <div className="text-[11px] text-zinc-500 font-mono">
+                      {server.transport_type === "docker" ? (
+                        <span className="flex items-center gap-1"><Container className="h-3 w-3 text-cyan-400" /> docker</span>
+                      ) : (
+                        server.transport_type
+                      )}
+                    </div>
                     </div>
                   </div>
                   <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-zinc-900 text-zinc-400">

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Server, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle, Terminal, Globe, Wrench } from "lucide-react";
+import { Plus, Server, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle, Terminal, Globe, Container, Wrench } from "lucide-react";
 import { AddServerModal } from "../components/AddServerModal";
 
 export const ServersPage: React.FC = () => {
@@ -105,6 +105,8 @@ export const ServersPage: React.FC = () => {
                     <div className="flex items-center gap-2.5">
                       {server.transport_type === "stdio" ? (
                         <Terminal className="h-4 w-4 text-indigo-400 shrink-0" />
+                      ) : server.transport_type === "docker" ? (
+                        <Container className="h-4 w-4 text-cyan-400 shrink-0" />
                       ) : (
                         <Globe className="h-4 w-4 text-emerald-400 shrink-0" />
                       )}
@@ -172,6 +174,28 @@ export const ServersPage: React.FC = () => {
                   <span className="font-mono text-zinc-200">{selectedServer.auth_type}</span>
                 </div>
               </div>
+
+              {/* Docker-specific details */}
+              {selectedServer.transport_type === "docker" && selectedServer.config && (
+                <div className="space-y-2 p-3 rounded-lg bg-zinc-950/40 border border-zinc-800/60">
+                  <div>
+                    <span className="text-zinc-500 block mb-1 text-xs">Docker Image</span>
+                    <span className="font-mono text-zinc-200 text-xs">{selectedServer.config.image}</span>
+                  </div>
+                  {selectedServer.config.env && Object.keys(selectedServer.config.env).length > 0 && (
+                    <div>
+                      <span className="text-zinc-500 block mb-1 text-xs">Environment Variables</span>
+                      <div className="space-y-1">
+                        {Object.entries(selectedServer.config.env).map(([k, v]) => (
+                          <div key={k} className="font-mono text-xs text-zinc-300">
+                            <span className="text-indigo-400">{k}</span>=<span className="text-zinc-400">{v as string}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {selectedServer.last_error && (
                 <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">
