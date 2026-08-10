@@ -15,6 +15,10 @@ This directory contains the architectural decisions for the MCP Router project, 
 | [ADR-0007](0007-extensible-auth-provider-pattern.md) | Use Extensible Auth Provider Pattern for Upstream Authentication | accepted |
 | [ADR-0008](0008-use-react-vite-tailwind-shadcn-for-frontend.md) | Use React, Vite, Tailwind CSS, and shadcn/ui for the Frontend Dashboard | accepted |
 | [ADR-0009](0009-api-key-based-downstream-auth.md) | Use Hashed API Keys for Downstream Client Authentication | accepted |
+| [ADR-0010](0010-migrate-to-drizzle-orm.md) | Migrate Database Layer to Drizzle ORM | accepted |
+| [ADR-0011](0011-docker-container-transport-type.md) | Support Docker Container Transport Type | accepted |
+| [ADR-0012](0012-raw-tcp-socket-for-docker-attach.md) | Use Raw TCP Socket for Docker Container Attach in DinD Environments | accepted |
+| [ADR-0013](0013-user-defined-mcp-prompts-and-permissions.md) | Support User-Defined MCP Prompts and Granular Prompt Permissions | accepted |
 
 ## Decision Map
 

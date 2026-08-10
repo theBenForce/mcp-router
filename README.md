@@ -28,38 +28,35 @@ A local, Dockerized web application and API proxy gateway for **Model Context Pr
 
 ## 🏗️ Architecture
 
-```
- ┌──────────────────────┐         ┌──────────────────────────────────────────────────────────┐
- │  LLM Clients / IDEs  │         │                    Docker Container                      │
- │  (Cursor, Claude,    │ Bearer  │  ┌──────────────────┐       ┌─────────────────────────┐  │
- │   Antigravity, etc.) ├─────────┼─►│ Hono HTTP Server │       │  React SPA Dashboard    │  │
- └──────────────────────┘ API Key │  │                  │       │  (Vite+Tailwind+shadcn) │  │
-                                  │  │  /sse   → SSE    │       └──────────┬──────────────┘  │
-                                  │  │  /mcp   → HTTP   │                  │                 │
-                                  │  │  /api/* → REST   │◄─────────────────┘                 │
-                                  │  │  /*     → SPA    │                                    │
-                                  │  └────────┬─────────┘                                    │
-                                  │           │                                              │
-                                  │           ▼                                              │
-                                  │  ┌────────────────────────────────────────────────────┐   │
-                                  │  │     Router Engine (Permission Filter + Namespace)  │   │
-                                  │  └────────┬──────────────────────────┬────────────────┘   │
-                                  │           │                          │                    │
-                                  │           ▼                          ▼                    │
-                                  │  ┌─────────────────┐        ┌──────────────────┐         │
-                                  │  │ Upstream Client  │        │ SQLite Database  │         │
-                                  │  │ Pool (MCP SDK)   │        │ (bun:sqlite)     │         │
-                                  │  └────────┬────────┘        └──────────────────┘         │
-                                  └───────────┼──────────────────────────────────────────────┘
-                                              │
-               ┌──────────────────────────────┼──────────────────────────────┐
-               │                              │                              │
-               ▼                              ▼                              ▼
-    ┌────────────────────┐       ┌──────────────────────┐       ┌──────────────────────┐
-    │ Docker Sidecar     │       │ Docker Sidecar        │       │ Remote MCP Server    │
-    │ node:22-alpine     │       │ python:3.12-slim      │       │ (HTTP/SSE endpoint)  │
-    │ npx @mcp/server-fs │       │ uvx mcp-server-x      │       │ https://api.example  │
-    └────────────────────┘       └──────────────────────┘       └──────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Clients ["LLM Clients & IDEs"]
+        C1["Cursor, Claude, Antigravity, etc."]
+    end
+
+    subgraph Container ["MCP Router Container (Docker)"]
+        SPA["React SPA Dashboard (Vite + Tailwind + shadcn)"]
+        HONO["Hono HTTP Server (/sse, /mcp, /api/*, /*)"]
+        ROUTER["Router Engine (Permission Filter + Auto-Namespacing)"]
+        POOL["Upstream Client Pool (MCP SDK)"]
+        DB[("SQLite Database (bun:sqlite)")]
+
+        SPA -->|REST API| HONO
+        HONO --> ROUTER
+        ROUTER --> POOL
+        ROUTER --> DB
+    end
+
+    subgraph Upstreams ["Upstream MCP Servers"]
+        SC_NODE["Docker Sidecar (node:22-alpine)"]
+        SC_PY["Docker Sidecar (python:3.12-slim)"]
+        REMOTE["Remote MCP Server (HTTP/SSE)"]
+    end
+
+    C1 -->|"Bearer API Key"| HONO
+    POOL -->|"stdio"| SC_NODE
+    POOL -->|"stdio"| SC_PY
+    POOL -->|"HTTP/SSE"| REMOTE
 ```
 
 ---
@@ -83,29 +80,37 @@ A local, Dockerized web application and API proxy gateway for **Model Context Pr
    docker compose up --build -d
    ```
 
-3. Open your browser to `http://localhost:3000` to access the Management Dashboard.
+3. Open your browser to `http://localhost:5170` to access the Management Dashboard.
 
 ---
 
-### Option 2: Local Development with Bun
+### Option 2: Local Development with Bun & Vite
 
-1. Install dependencies using `mise` and `bun`:
+1. **Install dependencies**:
    ```bash
-   mise trust
    mise exec -- bun install
    ```
 
-2. Build the frontend SPA assets:
-   ```bash
-   cd src/web && mise exec -- bun run build && cd ../..
-   ```
+2. **Frontend Development with Instant Hot Reloading (Recommended for UI work)**:
+   Run the backend API server and Vite dev server concurrently in two terminal tabs:
 
-3. Start the backend development server (with hot reload):
-   ```bash
-   mise exec -- bun dev
-   ```
+   - **Terminal 1 (Backend API on `http://localhost:5170`)**:
+     ```bash
+     bun dev
+     ```
+   - **Terminal 2 (Vite Frontend Dev Server on `http://localhost:5173`)**:
+     ```bash
+     bun dev:web
+     ```
+   *Open `http://localhost:5173` in your browser. Vite automatically proxies `/api`, `/sse`, and `/mcp` requests to the backend server while giving you instant React HMR.*
 
-4. Open `http://localhost:3000` in your browser.
+3. **Single Production Build**:
+   Alternatively, build static assets into `src/web/dist` and serve everything from the Bun backend:
+   ```bash
+   bun run build:web
+   bun dev
+   ```
+   *Open `http://localhost:5170` in your browser.*
 
 ---
 
@@ -122,7 +127,7 @@ DATABASE_PATH=":memory:" mise exec -- bun test
 ## 📖 Usage Guide
 
 ### 1. Register an Upstream MCP Server
-- Open the dashboard at `http://localhost:3000` and click **Add MCP Server**.
+- Open the dashboard at `http://localhost:5170` and click **Add MCP Server**.
 - Choose **Stdio (Docker Sidecar)** for local commands (e.g. `npx -y @modelcontextprotocol/server-filesystem /data`) or **HTTP / SSE Endpoint** for remote servers.
 - Upon saving, MCP Router automatically connects, discovers available tools, and namespaces them as `{server_name}__{tool_name}`.
 
@@ -146,7 +151,7 @@ DATABASE_PATH=":memory:" mise exec -- bun test
       "args": [
         "-y",
         "@modelcontextprotocol/server-sse",
-        "http://localhost:3000/sse?apiKey=mcpr_YOUR_SECRET_KEY_HERE"
+        "http://localhost:5170/sse?apiKey=mcpr_YOUR_SECRET_KEY_HERE"
       ]
     }
   }
@@ -156,13 +161,13 @@ DATABASE_PATH=":memory:" mise exec -- bun test
 #### Streamable HTTP (`POST /mcp`) via cURL
 ```bash
 # List permitted tools
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:5170/mcp \
   -H "Authorization: Bearer mcpr_YOUR_SECRET_KEY_HERE" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}'
 
 # Execute a namespaced tool
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:5170/mcp \
   -H "Authorization: Bearer mcpr_YOUR_SECRET_KEY_HERE" \
   -H "Content-Type: application/json" \
   -d '{
