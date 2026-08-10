@@ -1,10 +1,11 @@
 import React from "react";
-import { Server, Key, Activity, Cpu, ShieldCheck } from "lucide-react";
+import { Server, Key, Activity, Cpu, ShieldCheck, MessageSquare } from "lucide-react";
 
 interface SidebarProps {
-  activeTab: "overview" | "servers" | "keys" | "audit";
-  setActiveTab: (tab: "overview" | "servers" | "keys" | "audit") => void;
+  activeTab: "overview" | "servers" | "prompts" | "keys" | "audit";
+  setActiveTab: (tab: "overview" | "servers" | "prompts" | "keys" | "audit") => void;
   serverCount: number;
+  promptCount: number;
   keyCount: number;
 }
 
@@ -12,11 +13,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   serverCount,
+  promptCount,
   keyCount,
 }) => {
   const navItems = [
     { id: "overview", label: "Overview", icon: Cpu, badge: null },
     { id: "servers", label: "MCP Servers", icon: Server, badge: serverCount },
+    { id: "prompts", label: "Prompts", icon: MessageSquare, badge: promptCount },
     { id: "keys", label: "API Keys", icon: Key, badge: keyCount },
     { id: "audit", label: "Audit Logs", icon: Activity, badge: null },
   ];
