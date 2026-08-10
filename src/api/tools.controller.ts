@@ -10,4 +10,22 @@ app.get("/", (c) => {
   return c.json(tools);
 });
 
+// Update tool action_type
+app.patch("/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const actionType = body.actionType || body.action_type;
+
+  if (!actionType || !["read", "write", "delete", "execute"].includes(actionType)) {
+    return c.json({ error: "Invalid action_type. Must be read, write, delete, or execute" }, 400);
+  }
+
+  const updated = toolService.updateToolActionType(id, actionType);
+  if (!updated) {
+    return c.json({ error: "Tool not found" }, 404);
+  }
+
+  return c.json(updated);
+});
+
 export default app;

@@ -92,6 +92,7 @@ export class ServerService {
         server_id: t.serverId,
         namespaced_name: t.namespacedName,
         input_schema_json: t.inputSchemaJson,
+        action_type: t.actionType,
         created_at: t.createdAt,
       })),
     };

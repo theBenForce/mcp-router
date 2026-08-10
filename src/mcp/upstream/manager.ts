@@ -10,6 +10,7 @@ import { MCPRouterOAuthProvider } from "./oauth-provider";
 import { DockerTransport } from "./docker-transport";
 import { parseDockerCommand } from "./docker-parser";
 import { sidecarManager } from "./sidecar";
+import { classifyToolAction } from "./classifier";
 
 export interface ActiveServerConnection {
   client: Client;
@@ -70,6 +71,7 @@ export class UpstreamConnectionManager {
             args: parsed.args,
             env: { ...parsed.env, ...authHeaders },
             volumes: parsed.volumes,
+            name: parsed.name || parsed.inferredName || server.name,
           };
         } else {
           sidecarConfig = {
@@ -78,11 +80,12 @@ export class UpstreamConnectionManager {
             args: config.args,
             env: { ...config.env, ...authHeaders },
             volumes: config.volumes,
+            name: config.name || server.name,
           };
         }
 
         console.log(`[UpstreamManager] Spawning sidecar for ${serverId} (${server.transportType}), image: ${sidecarConfig.image}`);
-        const sidecar = await sidecarManager.spawnSidecar(serverId, sidecarConfig);
+        const sidecar = await sidecarManager.spawnSidecar(serverId, sidecarConfig, server.name);
         console.log(`[UpstreamManager] Sidecar spawned for ${serverId}, connecting transport...`);
         stopSidecar = sidecar.stop;
 
@@ -126,6 +129,7 @@ export class UpstreamConnectionManager {
       for (const tool of discoveredTools) {
         const toolId = crypto.randomUUID();
         const namespacedName = `${server.name}__${tool.name}`;
+        const actionType = classifyToolAction(tool.name, tool.description || "");
 
         // Upsert: insert or update on conflict
         db.insert(mcpTools)
@@ -136,6 +140,7 @@ export class UpstreamConnectionManager {
             namespacedName,
             description: tool.description || "",
             inputSchemaJson: JSON.stringify(tool.inputSchema || {}),
+            actionType,
           })
           .onConflictDoUpdate({
             target: [mcpTools.serverId, mcpTools.name],
@@ -171,8 +176,30 @@ export class UpstreamConnectionManager {
         stopSidecar,
       });
 
+      // Capture metadata returned by upstream MCP server during initialization
+      const serverVersionInfo = client.getServerVersion();
+      const instructions = client.getInstructions();
+
+      const serverVersion = serverVersionInfo?.version || null;
+      const serverTitle = serverVersionInfo?.title || null;
+      const websiteUrl = serverVersionInfo?.websiteUrl || null;
+      const iconsJson = serverVersionInfo?.icons ? JSON.stringify(serverVersionInfo.icons) : null;
+      const autoDescription = (!server.description || server.description.trim() === "")
+        ? (serverVersionInfo?.description || serverTitle || instructions || "")
+        : server.description;
+
       db.update(mcpServers)
-        .set({ status: "connected", lastError: null, updatedAt: sql`datetime('now')` })
+        .set({
+          status: "connected",
+          lastError: null,
+          serverVersion,
+          serverTitle,
+          instructions: instructions || null,
+          websiteUrl,
+          iconsJson,
+          description: autoDescription,
+          updatedAt: sql`datetime('now')`,
+        })
         .where(eq(mcpServers.id, serverId))
         .run();
 

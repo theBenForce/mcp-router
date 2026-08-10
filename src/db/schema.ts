@@ -29,6 +29,7 @@ export const mcpTools = sqliteTable("mcp_tools", {
   namespacedName: text("namespaced_name").notNull(),
   description: text("description"),
   inputSchemaJson: text("input_schema_json").notNull(),
+  actionType: text("action_type", { enum: ["read", "write", "delete", "execute"] }).notNull().default("write"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
 }, (table) => [
   index("idx_tools_server").on(table.serverId),
@@ -77,11 +78,12 @@ export const apiKeyPermissions = sqliteTable("api_key_permissions", {
   serverId: text("server_id").references(() => mcpServers.id, { onDelete: "cascade" }),
   toolId: text("tool_id").references(() => mcpTools.id, { onDelete: "cascade" }),
   promptId: text("prompt_id").references(() => mcpPrompts.id, { onDelete: "cascade" }),
+  actionType: text("action_type", { enum: ["read", "write", "delete", "execute"] }),
 }, (table) => [
   index("idx_perms_key").on(table.apiKeyId),
   index("idx_perms_server").on(table.serverId),
   index("idx_perms_prompt").on(table.promptId),
-  uniqueIndex("uq_perms_key_server_tool_prompt").on(table.apiKeyId, table.serverId, table.toolId, table.promptId),
+  uniqueIndex("uq_perms_key_server_tool_prompt_action").on(table.apiKeyId, table.serverId, table.toolId, table.promptId, table.actionType),
 ]);
 
 // Audit Log

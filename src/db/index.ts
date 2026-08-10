@@ -94,6 +94,7 @@ function pushSchema(db: Database) {
       namespaced_name TEXT NOT NULL,
       description TEXT,
       input_schema_json TEXT NOT NULL,
+      action_type TEXT NOT NULL DEFAULT 'write' CHECK(action_type IN ('read', 'write', 'delete', 'execute')),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(server_id, name)
     );
@@ -134,7 +135,8 @@ function pushSchema(db: Database) {
       server_id TEXT REFERENCES mcp_servers(id) ON DELETE CASCADE,
       tool_id TEXT REFERENCES mcp_tools(id) ON DELETE CASCADE,
       prompt_id TEXT REFERENCES mcp_prompts(id) ON DELETE CASCADE,
-      UNIQUE(api_key_id, server_id, tool_id, prompt_id)
+      action_type TEXT CHECK(action_type IN ('read', 'write', 'delete', 'execute')),
+      UNIQUE(api_key_id, server_id, tool_id, prompt_id, action_type)
     );
 
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -156,6 +158,20 @@ function pushSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
   `);
 
+  // Migration: add action_type column to mcp_tools if missing
+  try {
+    db.exec("ALTER TABLE mcp_tools ADD COLUMN action_type TEXT NOT NULL DEFAULT 'write'");
+  } catch {
+    // Column already exists or error
+  }
+
+  // Migration: add action_type column to api_key_permissions if missing
+  try {
+    db.exec("ALTER TABLE api_key_permissions ADD COLUMN action_type TEXT");
+  } catch {
+    // Column already exists or error
+  }
+
   // Migration: ensure api_key_permissions supports NULL server_id/tool_id and has prompt_id column
   try {
     db.exec("INSERT INTO api_key_permissions (id, api_key_id, server_id, tool_id, prompt_id) VALUES ('__migration_test__', '__migration_test__', NULL, NULL, NULL)");
@@ -169,10 +185,11 @@ function pushSchema(db: Database) {
           server_id TEXT REFERENCES mcp_servers(id) ON DELETE CASCADE,
           tool_id TEXT REFERENCES mcp_tools(id) ON DELETE CASCADE,
           prompt_id TEXT REFERENCES mcp_prompts(id) ON DELETE CASCADE,
-          UNIQUE(api_key_id, server_id, tool_id, prompt_id)
+          action_type TEXT CHECK(action_type IN ('read', 'write', 'delete', 'execute')),
+          UNIQUE(api_key_id, server_id, tool_id, prompt_id, action_type)
         );
-        INSERT INTO api_key_permissions_new (id, api_key_id, server_id, tool_id)
-          SELECT id, api_key_id, server_id, tool_id FROM api_key_permissions;
+        INSERT INTO api_key_permissions_new (id, api_key_id, server_id, tool_id, prompt_id, action_type)
+          SELECT id, api_key_id, server_id, tool_id, prompt_id, action_type FROM api_key_permissions;
         DROP TABLE api_key_permissions;
         ALTER TABLE api_key_permissions_new RENAME TO api_key_permissions;
       `);
@@ -213,6 +230,8 @@ function pushSchema(db: Database) {
       ALTER TABLE mcp_servers_new RENAME TO mcp_servers;
     `);
   }
+
+  // Migration: add metadata columns to mcp_servers if missing
   try { db.exec("ALTER TABLE mcp_servers ADD COLUMN server_version TEXT"); } catch {}
   try { db.exec("ALTER TABLE mcp_servers ADD COLUMN server_title TEXT"); } catch {}
   try { db.exec("ALTER TABLE mcp_servers ADD COLUMN instructions TEXT"); } catch {}

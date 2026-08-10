@@ -3,14 +3,22 @@ import { eq, and, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { apiKeys, apiKeyPermissions, mcpServers, mcpTools, mcpPrompts } from "../db/schema";
 
+export interface PermissionRuleInput {
+  serverId?: string | null;
+  toolId?: string | null;
+  promptId?: string | null;
+  actionType?: "read" | "write" | "delete" | "execute" | null;
+  action_type?: "read" | "write" | "delete" | "execute" | null;
+}
+
 export interface CreateKeyInput {
   name: string;
   expiresAt?: string | null;
-  permissions?: Array<{ serverId?: string | null; toolId?: string | null; promptId?: string | null }>;
+  permissions?: PermissionRuleInput[];
 }
 
 export interface SetPermissionsInput {
-  permissions: Array<{ serverId?: string | null; toolId?: string | null; promptId?: string | null }>;
+  permissions: PermissionRuleInput[];
 }
 
 export class KeyService {
@@ -119,6 +127,7 @@ export class KeyService {
         server_id: apiKeyPermissions.serverId,
         tool_id: apiKeyPermissions.toolId,
         prompt_id: apiKeyPermissions.promptId,
+        action_type: apiKeyPermissions.actionType,
         server_name: mcpServers.name,
         tool_name: mcpTools.name,
         prompt_name: mcpPrompts.name,
@@ -140,6 +149,7 @@ export class KeyService {
 
     for (const perm of input.permissions) {
       if (!perm.serverId && !perm.promptId) continue;
+      const actionType = perm.actionType ?? perm.action_type ?? null;
       db.insert(apiKeyPermissions)
         .values({
           id: crypto.randomUUID(),
@@ -147,6 +157,7 @@ export class KeyService {
           serverId: perm.serverId || null,
           toolId: perm.toolId || null,
           promptId: perm.promptId || null,
+          actionType: actionType as "read" | "write" | "delete" | "execute" | null,
         })
         .run();
     }

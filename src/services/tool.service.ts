@@ -13,6 +13,7 @@ export class ToolService {
         namespaced_name: mcpTools.namespacedName,
         description: mcpTools.description,
         input_schema_json: mcpTools.inputSchemaJson,
+        action_type: mcpTools.actionType,
         created_at: mcpTools.createdAt,
         server_name: mcpServers.name,
         server_status: mcpServers.status,
@@ -38,6 +39,7 @@ export class ToolService {
         namespaced_name: mcpTools.namespacedName,
         description: mcpTools.description,
         input_schema_json: mcpTools.inputSchemaJson,
+        action_type: mcpTools.actionType,
         created_at: mcpTools.createdAt,
         server_name: mcpServers.name,
         server_status: mcpServers.status,
@@ -46,6 +48,16 @@ export class ToolService {
       .innerJoin(mcpServers, eq(mcpTools.serverId, mcpServers.id))
       .where(eq(mcpTools.namespacedName, namespacedName))
       .get();
+  }
+
+  updateToolActionType(toolId: string, actionType: "read" | "write" | "delete" | "execute") {
+    const db = getDb();
+    db.update(mcpTools)
+      .set({ actionType })
+      .where(eq(mcpTools.id, toolId))
+      .run();
+
+    return db.select().from(mcpTools).where(eq(mcpTools.id, toolId)).get();
   }
 }
 
