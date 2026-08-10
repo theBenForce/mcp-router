@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { cors } from "hono/cors";
+import { serveStatic } from "hono/bun";
+import fs from "node:fs";
+import path from "node:path";
 import { config } from "./config";
 import { getDb } from "./db";
 import serversController from "./api/servers.controller";
@@ -31,6 +34,16 @@ app.route("/api/audit", auditController);
 
 // Downstream MCP Proxy Transports (SSE & Streamable HTTP)
 app.route("/", downstreamHandler);
+
+// Serve Frontend SPA Static Assets
+const staticDir = fs.existsSync(config.publicDir)
+  ? config.publicDir
+  : path.join(process.cwd(), "src", "web", "dist");
+
+if (fs.existsSync(staticDir)) {
+  app.use("/assets/*", serveStatic({ root: path.relative(process.cwd(), staticDir) }));
+  app.get("*", serveStatic({ path: path.relative(process.cwd(), path.join(staticDir, "index.html")) }));
+}
 
 // Initialize DB on server start
 getDb();

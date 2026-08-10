@@ -7,8 +7,9 @@ import { auditService } from "../../services/audit.service";
 
 const app = new Hono();
 
-// Apply Auth Middleware to all downstream MCP proxy endpoints
-app.use("*", downstreamAuthMiddleware);
+// Apply Auth Middleware to downstream MCP proxy endpoints
+app.use("/mcp", downstreamAuthMiddleware);
+app.use("/sse", downstreamAuthMiddleware);
 
 /**
  * Handle JSON-RPC request for MCP
