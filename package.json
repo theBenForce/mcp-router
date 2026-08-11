@@ -13,7 +13,10 @@
     "build": "bun build:web",
     "db:generate": "bun --bun drizzle-kit generate",
     "db:migrate": "bun --bun drizzle-kit migrate",
-    "db:studio": "bun --bun drizzle-kit studio"
+    "db:studio": "bun --bun drizzle-kit studio",
+    "tauri": "tauri",
+    "dev:desktop": "tauri dev",
+    "build:desktop": "bun run build:web && bun build --compile src/index.ts --outfile src-tauri/bin/backend && tauri build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.1.0",
@@ -23,6 +26,7 @@
     "mustache": "^4.2.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
     "@types/bun": "latest",
     "@types/dockerode": "^4.0.1",
     "@types/mustache": "^4.2.6",
