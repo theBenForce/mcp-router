@@ -14,6 +14,40 @@ import { serverService } from "../services/server.service";
 const app = new Hono();
 
 /**
+ * GET /api/oauth/discover?url=xxx
+ * Discovers OAuth 2.1 authorization server metadata (RFC 8414/9728)
+ * and returns supported scopes and metadata.
+ */
+app.get("/discover", async (c) => {
+  const urlParam = c.req.query("url");
+  if (!urlParam) {
+    return c.json({ error: "Missing required parameter: url" }, 400);
+  }
+
+  try {
+    const serverInfo = await discoverOAuthServerInfo(urlParam);
+    const scopesSupported =
+      serverInfo.resourceMetadata?.scopes_supported ||
+      serverInfo.authorizationServerMetadata.scopes_supported ||
+      [];
+    console.log(`[OAuthController] Discovered OAuth server info for ${urlParam}:`, {
+      authServerUrl: serverInfo.authorizationServerUrl,
+      scopesCount: scopesSupported.length,
+      scopesSupported,
+    });
+    return c.json({
+      authorizationServerUrl: serverInfo.authorizationServerUrl,
+      metadata: serverInfo.authorizationServerMetadata,
+      resourceMetadata: serverInfo.resourceMetadata,
+      scopes_supported: scopesSupported,
+    });
+  } catch (err: any) {
+    console.error(`[OAuthController] Discovery failed for ${urlParam}:`, err);
+    return c.json({ error: err.message || String(err) }, 500);
+  }
+});
+
+/**
  * GET /api/oauth/authorize?serverId=xxx
  * Initiates OAuth 2.1 PKCE authorization flow for an upstream server.
  */
@@ -29,7 +63,8 @@ app.get("/authorize", async (c) => {
   }
 
   try {
-    const config = JSON.parse(server.config_json || "{}");
+    const configJsonStr = (server as any).configJson || (server as any).config_json || "{}";
+    const config = typeof configJsonStr === "string" ? JSON.parse(configJsonStr) : configJsonStr;
     const serverUrl = config.url;
     if (!serverUrl) {
       return c.json({ error: "Server config must contain a valid url for OAuth" }, 400);
@@ -52,6 +87,23 @@ app.get("/authorize", async (c) => {
       await oauthProvider.saveClientInformation(clientInfo);
     }
 
+    const authDataJsonStr = (server as any).authDataJson || (server as any).auth_data_json || "{}";
+    const authData = typeof authDataJsonStr === "string" ? JSON.parse(authDataJsonStr) : authDataJsonStr;
+    
+    const scopesSupported =
+      serverInfo.resourceMetadata?.scopes_supported ||
+      serverInfo.authorizationServerMetadata.scopes_supported;
+
+    // Use explicit config/auth scopes, or fall back to discovered supported scopes
+    const requestedScope =
+      config.scopes ||
+      config.scope ||
+      authData.scopes ||
+      authData.scope ||
+      (scopesSupported ? scopesSupported.join(" ") : undefined);
+
+    console.log(`[OAuthController] Authorizing server ${serverId} (${server.name}) with scope: "${requestedScope}"`);
+
     const stateStr = oauthProvider.state();
     const { authorizationUrl, codeVerifier } = await startAuthorization(
       serverInfo.authorizationServerUrl,
@@ -59,11 +111,14 @@ app.get("/authorize", async (c) => {
         metadata: serverInfo.authorizationServerMetadata,
         clientInformation: clientInfo,
         redirectUrl: oauthProvider.redirectUrl,
+        scope: requestedScope,
         state: stateStr,
       }
     );
 
     await oauthProvider.saveCodeVerifier(codeVerifier);
+
+    console.log(`[OAuthController] Generated auth URL for ${serverId}: ${authorizationUrl.toString()}`);
 
     return c.redirect(authorizationUrl.toString());
   } catch (err: any) {

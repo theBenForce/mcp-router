@@ -282,10 +282,28 @@ export class UpstreamConnectionManager {
     }
 
     const activeConn = this.activeConnections.get(serverId)!;
-    return await activeConn.client.callTool({
-      name: originalToolName,
-      arguments: args,
-    });
+    try {
+      const result = await activeConn.client.callTool({
+        name: originalToolName,
+        arguments: args,
+      });
+
+      // Check for tool execution errors returned in MCP CallToolResult
+      if (result && typeof result === "object" && (result as any).isError) {
+        console.warn(
+          `[UpstreamManager] Tool '${originalToolName}' on server ${serverId} returned isError: true`,
+          JSON.stringify(result)
+        );
+      }
+
+      return result;
+    } catch (err: any) {
+      console.error(
+        `[UpstreamManager] Tool '${originalToolName}' call failed on server ${serverId}:`,
+        err.message || String(err)
+      );
+      throw err;
+    }
   }
 
   async reconnectAll(): Promise<void> {
