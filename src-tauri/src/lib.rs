@@ -10,14 +10,21 @@ fn get_backend_port() -> u16 {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
+    let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init());
+
+    #[cfg(debug_assertions)]
+    {
+        builder = builder.plugin(tauri_plugin_mcp_bridge::init());
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![get_backend_port])
-        .setup(|app| {
+        .setup(|_app| {
             println!("[Tauri] Setting up MCP Router Desktop Shell...");
             Ok(())
         })
-        .on_window_event(|window, event| {
+        .on_window_event(|_window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 println!("[Tauri] App window closing cleanly.");
             }
