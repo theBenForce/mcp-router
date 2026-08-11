@@ -10,6 +10,7 @@ import { MCPRouterOAuthProvider } from "./oauth-provider";
 import { DockerTransport } from "./docker-transport";
 import { parseDockerCommand } from "./docker-parser";
 import { sidecarManager } from "./sidecar";
+import { hostProcessManager } from "./host";
 import { classifyToolAction } from "./classifier";
 
 export interface ActiveServerConnection {
@@ -54,46 +55,67 @@ export class UpstreamConnectionManager {
       let stopSidecar: (() => Promise<void>) | undefined;
 
       if (server.transportType === "stdio" || server.transportType === "docker") {
-        // Both stdio and docker use the Docker sidecar + DockerTransport
-        let sidecarConfig: {
-          image?: string;
-          command?: string;
-          args?: string[];
-          env?: Record<string, string>;
-          volumes?: string[];
-        };
+        const isDocker = server.transportType === "docker" || server.executorType === "docker";
 
-        if (server.transportType === "docker" && config.rawCommand) {
-          const parsed = parseDockerCommand(config.rawCommand);
-          sidecarConfig = {
-            image: parsed.image,
-            command: parsed.command,
-            args: parsed.args,
-            env: { ...parsed.env, ...authHeaders },
-            volumes: parsed.volumes,
-            name: parsed.name || parsed.inferredName || server.name,
-          };
-        } else {
-          sidecarConfig = {
-            image: config.image,
+        if (!isDocker) {
+          // Default: execute directly on host OS using HostProcessManager
+          const hostConfig = {
             command: config.command,
             args: config.args,
             env: { ...config.env, ...authHeaders },
-            volumes: config.volumes,
-            name: config.name || server.name,
           };
+
+          console.log(`[UpstreamManager] Spawning host process for ${serverId} (${server.name}), command: ${config.command}`);
+          const hostConn = await hostProcessManager.spawnHostProcess(serverId, hostConfig);
+          stopSidecar = hostConn.stop;
+
+          transport = new DockerTransport({
+            readable: hostConn.readable,
+            writable: hostConn.writable,
+            stop: hostConn.stop,
+          });
+        } else {
+          // Docker Sidecar container execution
+          let sidecarConfig: {
+            image?: string;
+            command?: string;
+            args?: string[];
+            env?: Record<string, string>;
+            volumes?: string[];
+          };
+
+          if (server.transportType === "docker" && config.rawCommand) {
+            const parsed = parseDockerCommand(config.rawCommand);
+            sidecarConfig = {
+              image: parsed.image,
+              command: parsed.command,
+              args: parsed.args,
+              env: { ...parsed.env, ...authHeaders },
+              volumes: parsed.volumes,
+              name: parsed.name || parsed.inferredName || server.name,
+            };
+          } else {
+            sidecarConfig = {
+              image: config.image,
+              command: config.command,
+              args: config.args,
+              env: { ...config.env, ...authHeaders },
+              volumes: config.volumes,
+              name: config.name || server.name,
+            };
+          }
+
+          console.log(`[UpstreamManager] Spawning sidecar for ${serverId} (${server.transportType}), image: ${sidecarConfig.image}`);
+          const sidecar = await sidecarManager.spawnSidecar(serverId, sidecarConfig, server.name);
+          console.log(`[UpstreamManager] Sidecar spawned for ${serverId}, connecting transport...`);
+          stopSidecar = sidecar.stop;
+
+          transport = new DockerTransport({
+            readable: sidecar.readable,
+            writable: sidecar.writable,
+            stop: sidecar.stop,
+          });
         }
-
-        console.log(`[UpstreamManager] Spawning sidecar for ${serverId} (${server.transportType}), image: ${sidecarConfig.image}`);
-        const sidecar = await sidecarManager.spawnSidecar(serverId, sidecarConfig, server.name);
-        console.log(`[UpstreamManager] Sidecar spawned for ${serverId}, connecting transport...`);
-        stopSidecar = sidecar.stop;
-
-        transport = new DockerTransport({
-          readable: sidecar.readable,
-          writable: sidecar.writable,
-          stop: sidecar.stop,
-        });
       } else if (server.transportType === "sse") {
         const url = new URL(config.url);
         transport = new SSEClientTransport(url, {
