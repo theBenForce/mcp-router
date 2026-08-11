@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Release (macOS Apple Silicon)
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install root dependencies
+        run: bun install
+
+      - name: Install web dependencies
+        run: cd src/web && bun install
+
+      - name: Create sidecar binary directory
+        run: mkdir -p src-tauri/bin
+
+      - name: Build Desktop App (macOS Apple Silicon DMG)
+        run: bun run build:desktop
+
+      - name: Verify DMG asset exists
+        run: ls -la src-tauri/target/**/bundle/dmg/*.dmg || ls -la src-tauri/target/release/bundle/dmg/*.dmg
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
