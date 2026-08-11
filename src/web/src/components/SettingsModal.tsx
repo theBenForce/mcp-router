@@ -69,7 +69,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-sse",
+        "mcp-remote",
         "http://localhost:${port}/sse?apiKey=mcpr_YOUR_KEY"
       ]
     }

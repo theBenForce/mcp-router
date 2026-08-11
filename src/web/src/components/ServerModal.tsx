@@ -136,6 +136,81 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   const [bearerToken, setBearerToken] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [headerName, setHeaderName] = useState("X-API-Key");
+  const [scopes, setScopes] = useState("");
+  const [discoveredScopes, setDiscoveredScopes] = useState<string[]>([]);
+  const [discovering, setDiscovering] = useState(false);
+
+  const fetchDiscoveredScopes = async (endpointUrl: string) => {
+    if (!endpointUrl || !endpointUrl.startsWith("http")) return;
+    setDiscovering(true);
+    try {
+      const res = await fetch(`/api/oauth/discover?url=${encodeURIComponent(endpointUrl)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.scopes_supported) && data.scopes_supported.length > 0) {
+          setDiscoveredScopes(data.scopes_supported);
+        } else {
+          setDiscoveredScopes([]);
+        }
+      }
+    } catch (e) {
+      setDiscoveredScopes([]);
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const [scopeInput, setScopeInput] = useState("");
+
+  const scopeList = scopes.trim().split(/\s+/).filter(Boolean);
+
+  const addScopeTag = (val: string) => {
+    const trimmed = val.trim();
+    if (!trimmed) return;
+    const tokens = trimmed.split(/[\s,]+/).filter(Boolean);
+    const set = new Set(scopeList);
+    for (const t of tokens) {
+      set.add(t);
+    }
+    setScopes(Array.from(set).join(" "));
+    setScopeInput("");
+  };
+
+  const removeScopeTag = (tagToRemove: string) => {
+    setScopes(scopeList.filter((s) => s !== tagToRemove).join(" "));
+  };
+
+  const handleScopeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === " " || e.key === ",") {
+      e.preventDefault();
+      addScopeTag(scopeInput);
+    } else if (e.key === "Backspace" && scopeInput === "" && scopeList.length > 0) {
+      e.preventDefault();
+      removeScopeTag(scopeList[scopeList.length - 1]);
+    }
+  };
+
+  const handleScopePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData("text");
+    addScopeTag(text);
+  };
+
+  const toggleScope = (scopeToToggle: string) => {
+    if (scopeList.includes(scopeToToggle)) {
+      removeScopeTag(scopeToToggle);
+    } else {
+      addScopeTag(scopeToToggle);
+    }
+  };
+
+  const addAllDiscoveredScopes = () => {
+    const currentSet = new Set(scopeList);
+    for (const ds of discoveredScopes) {
+      currentSet.add(ds);
+    }
+    setScopes(Array.from(currentSet).join(" "));
+  };
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -203,11 +278,18 @@ export const ServerModal: React.FC<ServerModalProps> = ({
 
       const aType = server.auth_type || server.authType || "none";
       setAuthType(aType);
+      const initialScopes = authData.scopes || authData.scope || cfg.scopes || cfg.scope || "";
+      setScopes(initialScopes);
       if (aType === "bearer") {
         setBearerToken(authData.token || "");
       } else if (aType === "api_key") {
         setApiKey(authData.apiKey || "");
         setHeaderName(authData.headerName || "X-API-Key");
+      }
+      if (aType === "oauth2" && cfg.url) {
+        fetchDiscoveredScopes(cfg.url);
+      } else {
+        setDiscoveredScopes([]);
       }
     } else {
       // Default initial state for Create mode
@@ -228,6 +310,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       setBearerToken("");
       setApiKey("");
       setHeaderName("X-API-Key");
+      setScopes("");
     }
     setError(null);
   }, [isOpen, server]);
@@ -316,6 +399,9 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         authData = { token: bearerToken.trim() };
       } else if (authType === "api_key") {
         authData = { apiKey: apiKey.trim(), headerName: headerName.trim() };
+      } else if (authType === "oauth2") {
+        const existingAuthData = typeof server?.auth_data === "object" && server.auth_data !== null ? server.auth_data : {};
+        authData = { ...existingAuthData, scopes: scopes.trim() };
       }
 
       const endpoint = isEdit ? `/api/servers/${server.id}` : "/api/servers";
@@ -873,14 +959,131 @@ export const ServerModal: React.FC<ServerModalProps> = ({
           </div>
 
           {authType === "oauth2" && (
-            <Alert className="bg-indigo-500/10 border-indigo-500/20 text-indigo-300 text-xs">
-              <AlertDescription>
-                <p className="font-semibold">OAuth 2.1 Auto-Discovery Enabled</p>
-                <p className="text-zinc-400 text-[11px] mt-0.5">
-                  Uses standard Metadata Discovery (RFC 8414/9728) and Dynamic Client Registration (RFC 7591). After adding or updating this server, click "Authenticate" on the server list card to authorize via browser.
+            <div className="space-y-2">
+              <Alert className="bg-indigo-500/10 border-indigo-500/20 text-indigo-300 text-xs">
+                <AlertDescription>
+                  <p className="font-semibold">OAuth 2.1 Auto-Discovery Enabled</p>
+                  <p className="text-zinc-400 text-[11px] mt-0.5">
+                    Uses standard Metadata Discovery (RFC 8414/9728) and Dynamic Client Registration (RFC 7591). After adding or updating this server, click "Authenticate" on the server list card to authorize via browser.
+                  </p>
+                </AlertDescription>
+              </Alert>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-zinc-300">
+                    OAuth Scopes (Optional)
+                  </label>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    disabled={discovering || !url.startsWith("http")}
+                    onClick={() => fetchDiscoveredScopes(url)}
+                    className="h-auto p-0 text-[11px] text-cyan-400 hover:text-cyan-300 gap-1"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    <span>{discovering ? "Discovering..." : "Discover Server Scopes"}</span>
+                  </Button>
+                </div>
+
+                {/* Multi-Select Tag Input Box */}
+                <div
+                  className="min-h-[38px] p-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs font-mono text-zinc-100 focus-within:border-indigo-500 flex flex-wrap items-center gap-1.5 cursor-text"
+                  onClick={(e) => {
+                    const inputEl = e.currentTarget.querySelector("input");
+                    if (inputEl) inputEl.focus();
+                  }}
+                >
+                  {scopeList.map((tag) => (
+                    <span
+                      key={tag}
+                      className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs px-2 py-0.5 rounded-md font-mono inline-flex items-center gap-1.5 group transition-colors"
+                    >
+                      <span>{tag}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeScopeTag(tag);
+                        }}
+                        className="text-indigo-400 hover:text-rose-400 font-bold focus:outline-none leading-none text-sm"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    list="discovered-scopes-list"
+                    placeholder={
+                      scopeList.length === 0
+                        ? "Type custom scope and press Enter/Space or paste list..."
+                        : "Add scope..."
+                    }
+                    value={scopeInput}
+                    onChange={(e) => setScopeInput(e.target.value)}
+                    onKeyDown={handleScopeKeyDown}
+                    onPaste={handleScopePaste}
+                    onBlur={() => {
+                      if (scopeInput.trim()) {
+                        addScopeTag(scopeInput);
+                      }
+                    }}
+                    className="bg-transparent border-none text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none flex-1 min-w-[140px] px-1"
+                  />
+                </div>
+
+                <datalist id="discovered-scopes-list">
+                  {discoveredScopes.map((sc, i) => (
+                    <option key={i} value={sc} />
+                  ))}
+                </datalist>
+
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Type custom scopes or press Space/Enter to add tags. Select advertised scopes below.
                 </p>
-              </AlertDescription>
-            </Alert>
+
+                {/* Discovered Scopes Autocomplete Chips */}
+                {discoveredScopes.length > 0 && (
+                  <div className="mt-2.5 space-y-1.5 bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/80">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-zinc-400 font-medium flex items-center gap-1">
+                        <Sparkles className="h-3 w-3 text-cyan-400" /> Advertised Server Scopes ({discoveredScopes.length}):
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={addAllDiscoveredScopes}
+                        className="h-5 px-1.5 text-[10px] text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10"
+                      >
+                        Add All Advertised
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                      {discoveredScopes.map((sc) => {
+                        const isSelected = scopeList.includes(sc);
+                        return (
+                          <button
+                            key={sc}
+                            type="button"
+                            onClick={() => toggleScope(sc)}
+                            className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors flex items-center gap-1 ${
+                              isSelected
+                                ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                                : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-zinc-700/50"
+                            }`}
+                          >
+                            {isSelected ? "✓ " : "+ "}
+                            {sc}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {authType === "bearer" && (

@@ -32,9 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div>
           {/* App Logo */}
           <div className="flex items-center gap-3 px-3 py-4 mb-6 border-b border-zinc-800/80">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <ShieldCheck className="h-5 w-5 text-white" />
-            </div>
+            <img src="/app-icon.svg" alt="MCP Router Icon" className="h-9 w-9 rounded-xl shadow-lg shadow-indigo-500/20 object-contain" />
             <div>
               <h1 className="font-bold text-base tracking-tight text-zinc-100">MCP Router</h1>
               <p className="text-xs text-zinc-400 font-mono">Local Proxy Gateway</p>

@@ -165,7 +165,7 @@ DATABASE_PATH=":memory:" mise exec -- bun test
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-sse",
+        "mcp-remote",
         "http://localhost:5170/sse?apiKey=mcpr_YOUR_SECRET_KEY_HERE"
       ]
     }

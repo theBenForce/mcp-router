@@ -4,6 +4,7 @@ import { Server, Key, Wrench, Activity, CheckCircle, AlertTriangle, ArrowRight, 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatLocalDateTime } from "@/lib/utils";
 
 interface OverviewPageProps {
   onNavigate?: (tab: "servers" | "keys" | "audit") => void;
@@ -199,8 +200,14 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
                   >
                     <div>
                       <div className="font-mono text-zinc-200 font-medium">{log.tool_name}</div>
-                      <div className="text-[11px] text-zinc-500">
-                        Key: <span className="font-mono">{log.key_prefix || "none"}</span>
+                      <div className="text-[11px] text-zinc-500 flex items-center gap-1.5">
+                        <span>Key: <span className="font-mono">{log.key_prefix || "none"}</span></span>
+                        {log.created_at && (
+                          <>
+                            <span>•</span>
+                            <span className="font-mono">{formatLocalDateTime(log.created_at)}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <Badge
