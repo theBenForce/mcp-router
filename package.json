@@ -6,15 +6,15 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "dev:web": "bun src/web/node_modules/vite/bin/vite.js src/web --config src/web/vite.config.ts",
+    "dev:web": "cd src/web && bun run dev",
     "start": "bun src/index.ts",
     "test": "DATABASE_PATH=:memory: bun test",
-    "build:web": "bun --cwd src/web run build",
+    "build:web": "cd src/web && bun run build",
     "build": "bun build:web",
     "db:generate": "bun --bun drizzle-kit generate",
     "db:migrate": "bun --bun drizzle-kit migrate",
     "db:studio": "bun --bun drizzle-kit studio",
-    "dev:all": "bun --watch src/index.ts & bun --cwd src/web run dev",
+    "dev:all": "bun --watch src/index.ts & cd src/web && bun run dev",
     "tauri": "tauri",
     "dev:desktop": "tauri dev",
     "build:desktop": "bun run build:web && bun build --compile src/index.ts --outfile src-tauri/bin/backend && tauri build"

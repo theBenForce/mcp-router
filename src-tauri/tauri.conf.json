@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "bun run dev:all",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "bun --cwd src/web run build",
+    "beforeBuildCommand": "cd src/web && bun run build",
     "frontendDist": "../src/web/dist"
   },
   "app": {
