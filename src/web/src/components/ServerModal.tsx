@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Server, Terminal, Globe, Container, Key, Shield, Plus, Trash2 } from "lucide-react";
+import { X, Server, Terminal, Globe, Container, Key, Shield, Plus, Trash2, Cpu, Sparkles, Folder } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -11,6 +11,44 @@ export interface ServerModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
+
+const PRESET_SERVERS = [
+  {
+    name: "Filesystem",
+    description: "Node.js official filesystem adapter",
+    command: "npx",
+    argsStr: "-y @modelcontextprotocol/server-filesystem /Users",
+    executorType: "host" as const,
+  },
+  {
+    name: "Git Repository",
+    description: "Python official git MCP server",
+    command: "uvx",
+    argsStr: "mcp-server-git",
+    executorType: "host" as const,
+  },
+  {
+    name: "Memory Graph",
+    description: "Knowledge graph memory MCP server",
+    command: "npx",
+    argsStr: "-y @modelcontextprotocol/server-memory",
+    executorType: "host" as const,
+  },
+  {
+    name: "SQLite Explorer",
+    description: "Python SQLite database adapter",
+    command: "uvx",
+    argsStr: "mcp-server-sqlite --db-path ./app.db",
+    executorType: "host" as const,
+  },
+  {
+    name: "Fetch Web",
+    description: "Node.js web fetch tool",
+    command: "npx",
+    argsStr: "-y @modelcontextprotocol/server-fetch",
+    executorType: "host" as const,
+  },
+];
 
 /**
  * Minimal docker run command parser for the frontend.
@@ -76,6 +114,8 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [transportType, setTransportType] = useState<"stdio" | "docker" | "sse" | "streamable-http">("streamable-http");
+  const [executorType, setExecutorType] = useState<"host" | "docker">("host");
+  const [cwd, setCwd] = useState("");
 
   // Stdio fields
   const [command, setCommand] = useState("npx");
@@ -134,9 +174,13 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         return [];
       };
 
+      const eType = server.executor_type || server.executorType || (tType === "docker" ? "docker" : "host");
+      setExecutorType(eType);
+
       if (tType === "stdio") {
         setCommand(cfg.command || "npx");
         setArgsStr(Array.isArray(cfg.args) ? cfg.args.join(" ") : cfg.args || "");
+        setCwd(cfg.cwd || "");
         setImage(cfg.image || "");
         if (cfg.env && typeof cfg.env === "object") {
           setEnvVars(Object.entries(cfg.env).map(([k, v]) => ({ key: k, value: String(v) })));
@@ -170,8 +214,10 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       setName("");
       setDescription("");
       setTransportType("streamable-http");
+      setExecutorType("host");
       setCommand("npx");
       setArgsStr("-y @modelcontextprotocol/server-filesystem /data");
+      setCwd("");
       setImage("");
       setUrl("");
       setRawCommand("");
@@ -199,6 +245,15 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         setName(parsed.inferredName);
       }
     }
+  };
+
+  const applyPreset = (preset: typeof PRESET_SERVERS[number]) => {
+    setName(preset.name);
+    setDescription(preset.description);
+    setTransportType("stdio");
+    setExecutorType(preset.executorType);
+    setCommand(preset.command);
+    setArgsStr(preset.argsStr);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -232,6 +287,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         config = {
           command: command.trim(),
           args,
+          ...(cwd.trim() ? { cwd: cwd.trim() } : {}),
           ...(image.trim() ? { image: image.trim() } : {}),
           ...(Object.keys(envObj).length > 0 ? { env: envObj } : {}),
           ...(volumeStrs.length > 0 ? { volumes: volumeStrs } : {}),
@@ -272,6 +328,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
           name: name.trim(),
           description: description.trim(),
           transportType,
+          executorType: transportType === "stdio" ? executorType : (transportType === "docker" ? "docker" : "host"),
           config,
           authType,
           authData,
@@ -380,7 +437,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                 }`}
               >
                 <Terminal className="h-3.5 w-3.5" />
-                <span>Stdio Sidecar</span>
+                <span>Stdio Command</span>
               </Button>
               <Button
                 type="button"
@@ -400,13 +457,74 @@ export const ServerModal: React.FC<ServerModalProps> = ({
 
           {/* Stdio Specific Inputs */}
           {transportType === "stdio" ? (
-            <div className="space-y-3 p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
+            <div className="space-y-3.5 p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
+              {/* Quick Presets */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-indigo-400 mb-1.5 flex items-center gap-1">
+                  <Sparkles className="h-3 w-3" />
+                  <span>Quick Presets (npx & uvx)</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESET_SERVERS.map((preset) => (
+                    <Button
+                      key={preset.name}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyPreset(preset)}
+                      className="h-7 text-xs bg-zinc-900 hover:bg-indigo-950/50 border-zinc-800 hover:border-indigo-500/50 text-zinc-300 hover:text-indigo-300"
+                    >
+                      <span className="font-mono text-[10px] text-indigo-400 mr-1">{preset.command}</span>
+                      <span>{preset.name}</span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Execution Mode Selector */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">Execution Environment</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExecutorType("host")}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
+                      executorType === "host"
+                        ? "bg-indigo-500/10 border-indigo-500/60 text-indigo-300 shadow-sm shadow-indigo-500/10"
+                        : "bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                    }`}
+                  >
+                    <Cpu className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-xs font-semibold block text-zinc-200">Host OS Direct</span>
+                      <span className="text-[11px] text-zinc-400 leading-tight block">Runs npx/uvx directly on host system</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExecutorType("docker")}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
+                      executorType === "docker"
+                        ? "bg-cyan-500/10 border-cyan-500/60 text-cyan-300 shadow-sm shadow-cyan-500/10"
+                        : "bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                    }`}
+                  >
+                    <Container className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-xs font-semibold block text-zinc-200">Docker Sidecar</span>
+                      <span className="text-[11px] text-zinc-400 leading-tight block">Runs in isolated Docker container</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1">Command *</label>
                 <Input
                   type="text"
                   required
-                  placeholder="npx, python, uvx"
+                  placeholder="npx, uvx, bunx, python"
                   value={command}
                   onChange={(e) => setCommand(e.target.value)}
                   className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
@@ -424,16 +542,32 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Custom Docker Image (Optional)</label>
-                <Input
-                  type="text"
-                  placeholder="Defaults to node:22-alpine or ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
-                  value={image}
-                  onChange={(e) => setImage(e.target.value)}
-                  className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
-                />
-              </div>
+              {executorType === "host" ? (
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1 flex items-center gap-1">
+                    <Folder className="h-3 w-3 text-indigo-400" />
+                    <span>Working Directory (cwd) (Optional)</span>
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. /Users/username/projects or leave empty for default"
+                    value={cwd}
+                    onChange={(e) => setCwd(e.target.value)}
+                    className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Custom Docker Image (Optional)</label>
+                  <Input
+                    type="text"
+                    placeholder="Defaults to node:22-alpine or ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
+                    value={image}
+                    onChange={(e) => setImage(e.target.value)}
+                    className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
+                  />
+                </div>
+              )}
 
               {/* Environment Variables */}
               <div>

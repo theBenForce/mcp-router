@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Server, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle, Terminal, Globe, Container, Wrench, Key, Pencil, Eye, Edit3, Trash, Play } from "lucide-react";
+import { Plus, Server, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle, Terminal, Globe, Container, Wrench, Key, Pencil, Eye, Edit3, Trash, Play, Cpu, Folder } from "lucide-react";
 import { AddServerModal } from "../components/AddServerModal";
 import { ServerModal } from "../components/ServerModal";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "../components/ui/accordion";
@@ -135,7 +135,9 @@ export const ServersPage: React.FC = () => {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      {server.transport_type === "stdio" ? (
+                      {server.transport_type === "stdio" && server.executor_type === "host" ? (
+                        <Cpu className="h-4 w-4 text-emerald-400 shrink-0" />
+                      ) : server.transport_type === "stdio" ? (
                         <Terminal className="h-4 w-4 text-indigo-400 shrink-0" />
                       ) : server.transport_type === "docker" ? (
                         <Container className="h-4 w-4 text-cyan-400 shrink-0" />
@@ -258,6 +260,20 @@ export const ServersPage: React.FC = () => {
                   <span className="font-mono text-zinc-200">{selectedServer.transport_type}</span>
                 </div>
                 <div>
+                  <span className="text-zinc-500 block mb-1">Execution Mode</span>
+                  <span className="font-mono text-zinc-200">
+                    {selectedServer.executor_type === "host" ? (
+                      <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                        <Cpu className="h-3 w-3 inline" /> Host OS Direct
+                      </span>
+                    ) : (
+                      <span className="text-cyan-400 font-semibold flex items-center gap-1">
+                        <Container className="h-3 w-3 inline" /> Docker Sidecar
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div>
                   <span className="text-zinc-500 block mb-1">Auth Type</span>
                   <span className="font-mono text-zinc-200">{selectedServer.auth_type}</span>
                 </div>
@@ -294,6 +310,15 @@ export const ServersPage: React.FC = () => {
               {/* Sidecar / Docker container details */}
               {(selectedServer.transport_type === "docker" || selectedServer.transport_type === "stdio") && selectedServer.config && (
                 <div className="space-y-2 p-3 rounded-lg bg-zinc-950/40 border border-zinc-800/60">
+                  {selectedServer.config.cwd && (
+                    <div>
+                      <span className="text-zinc-500 block mb-1 text-xs">Working Directory (cwd)</span>
+                      <span className="font-mono text-indigo-300 text-xs flex items-center gap-1">
+                        <Folder className="h-3 w-3 inline text-indigo-400" />
+                        {selectedServer.config.cwd}
+                      </span>
+                    </div>
+                  )}
                   {selectedServer.config.image && (
                     <div>
                       <span className="text-zinc-500 block mb-1 text-xs">Docker Image</span>
