@@ -7,6 +7,7 @@ export interface CreateServerInput {
   name: string;
   description?: string;
   transportType: "stdio" | "docker" | "sse" | "streamable-http";
+  executorType?: "host" | "docker";
   config: Record<string, unknown>;
   authType?: "none" | "api_key" | "bearer" | "oauth2";
   authData?: Record<string, unknown>;
@@ -16,6 +17,7 @@ export interface UpdateServerInput {
   name?: string;
   description?: string;
   transportType?: "stdio" | "docker" | "sse" | "streamable-http";
+  executorType?: "host" | "docker";
   config?: Record<string, unknown>;
   authType?: "none" | "api_key" | "bearer" | "oauth2";
   authData?: Record<string, unknown>;
@@ -35,6 +37,7 @@ export class ServerService {
         website_url: mcpServers.websiteUrl,
         icons_json: mcpServers.iconsJson,
         transport_type: mcpServers.transportType,
+        executor_type: mcpServers.executorType,
         config_json: mcpServers.configJson,
         auth_type: mcpServers.authType,
         auth_data_json: mcpServers.authDataJson,
@@ -81,6 +84,7 @@ export class ServerService {
       website_url: server.websiteUrl,
       icons_json: server.iconsJson,
       transport_type: server.transportType,
+      executor_type: server.executorType,
       config_json: server.configJson,
       auth_type: server.authType,
       auth_data_json: server.authDataJson,
@@ -104,6 +108,7 @@ export class ServerService {
     const configJson = JSON.stringify(input.config);
     const authDataJson = JSON.stringify(input.authData || {});
     const authType = input.authType || "none";
+    const executorType = input.executorType || (input.transportType === "docker" ? "docker" : "host");
 
     db.insert(mcpServers)
       .values({
@@ -111,6 +116,7 @@ export class ServerService {
         name: input.name,
         description: input.description || "",
         transportType: input.transportType,
+        executorType,
         configJson,
         authType,
         authDataJson,
@@ -135,6 +141,7 @@ export class ServerService {
     const name = input.name ?? existing.name;
     const description = input.description ?? existing.description;
     const transportType = input.transportType ?? existing.transport_type;
+    const executorType = input.executorType ?? existing.executor_type;
     const configJson = input.config ? JSON.stringify(input.config) : existing.config_json;
     const authType = input.authType ?? existing.auth_type;
     const authDataJson = input.authData ? JSON.stringify(input.authData) : existing.auth_data_json;
@@ -144,6 +151,7 @@ export class ServerService {
         name,
         description,
         transportType,
+        executorType,
         configJson,
         authType,
         authDataJson,

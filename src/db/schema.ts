@@ -12,6 +12,7 @@ export const mcpServers = sqliteTable("mcp_servers", {
   websiteUrl: text("website_url"),
   iconsJson: text("icons_json"),
   transportType: text("transport_type", { enum: ["stdio", "docker", "sse", "streamable-http"] }).notNull(),
+  executorType: text("executor_type", { enum: ["host", "docker"] }).notNull().default("host"),
   configJson: text("config_json").notNull(),
   authType: text("auth_type", { enum: ["none", "api_key", "bearer", "oauth2"] }).notNull().default("none"),
   authDataJson: text("auth_data_json"),

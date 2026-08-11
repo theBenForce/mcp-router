@@ -70,6 +70,7 @@ function pushSchema(db: Database) {
       website_url TEXT,
       icons_json TEXT,
       transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'docker', 'sse', 'streamable-http')),
+      executor_type TEXT NOT NULL DEFAULT 'host' CHECK(executor_type IN ('host', 'docker')),
       config_json TEXT NOT NULL,
       auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer', 'oauth2')),
       auth_data_json TEXT,
@@ -237,4 +238,5 @@ function pushSchema(db: Database) {
   try { db.exec("ALTER TABLE mcp_servers ADD COLUMN instructions TEXT"); } catch {}
   try { db.exec("ALTER TABLE mcp_servers ADD COLUMN website_url TEXT"); } catch {}
   try { db.exec("ALTER TABLE mcp_servers ADD COLUMN icons_json TEXT"); } catch {}
+  try { db.exec("ALTER TABLE mcp_servers ADD COLUMN executor_type TEXT NOT NULL DEFAULT 'host'"); } catch {}
 }
