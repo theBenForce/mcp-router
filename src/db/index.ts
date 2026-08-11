@@ -71,7 +71,7 @@ function pushSchema(db: Database) {
       icons_json TEXT,
       transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'docker', 'sse', 'streamable-http')),
       config_json TEXT NOT NULL,
-      auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer', 'oauth2')),
+      auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer', 'oauth2', 'cli_command')),
       auth_data_json TEXT,
       status TEXT NOT NULL DEFAULT 'disconnected' CHECK(status IN ('connected', 'disconnected', 'connecting', 'error', 'need_auth')),
       last_error TEXT,
@@ -204,9 +204,9 @@ function pushSchema(db: Database) {
     // Index already exists
   }
 
-  // Migration: update existing databases that don't have 'streamable-http' or 'oauth2' in the CHECK constraint
+  // Migration: update existing databases that don't have 'streamable-http', 'oauth2', or 'cli_command' in the CHECK constraint
   try {
-    db.exec("INSERT INTO mcp_servers (id, name, transport_type, auth_type, config_json) VALUES ('__migration_test__', '__migration_test__', 'streamable-http', 'oauth2', '{}')");
+    db.exec("INSERT INTO mcp_servers (id, name, transport_type, auth_type, config_json) VALUES ('__migration_test__', '__migration_test__', 'streamable-http', 'cli_command', '{}')");
     db.exec("DELETE FROM mcp_servers WHERE id = '__migration_test__'");
   } catch {
     // CHECK constraint failed - need to migrate
@@ -216,16 +216,22 @@ function pushSchema(db: Database) {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
         description TEXT,
+        server_version TEXT,
+        server_title TEXT,
+        instructions TEXT,
+        website_url TEXT,
+        icons_json TEXT,
         transport_type TEXT NOT NULL CHECK(transport_type IN ('stdio', 'docker', 'sse', 'streamable-http')),
         config_json TEXT NOT NULL,
-        auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer', 'oauth2')),
+        auth_type TEXT NOT NULL DEFAULT 'none' CHECK(auth_type IN ('none', 'api_key', 'bearer', 'oauth2', 'cli_command')),
         auth_data_json TEXT,
         status TEXT NOT NULL DEFAULT 'disconnected' CHECK(status IN ('connected', 'disconnected', 'connecting', 'error', 'need_auth')),
         last_error TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      INSERT INTO mcp_servers_new SELECT * FROM mcp_servers;
+      INSERT INTO mcp_servers_new (id, name, description, transport_type, config_json, auth_type, auth_data_json, status, last_error, created_at, updated_at)
+        SELECT id, name, description, transport_type, config_json, auth_type, auth_data_json, status, last_error, created_at, updated_at FROM mcp_servers;
       DROP TABLE mcp_servers;
       ALTER TABLE mcp_servers_new RENAME TO mcp_servers;
     `);

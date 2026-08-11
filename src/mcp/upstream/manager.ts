@@ -1,8 +1,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { eq, and, notInArray, sql } from "drizzle-orm";
+import { eq, ne, and, notInArray, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { mcpServers, mcpTools } from "../../db/schema";
 import { createAuthProvider } from "./auth";
@@ -53,8 +54,20 @@ export class UpstreamConnectionManager {
       let transport: Transport;
       let stopSidecar: (() => Promise<void>) | undefined;
 
-      if (server.transportType === "stdio" || server.transportType === "docker") {
-        // Both stdio and docker use the Docker sidecar + DockerTransport
+      if (server.transportType === "stdio" && !config.useDocker) {
+        console.log(`[UpstreamManager] Spawning native host stdio transport for ${serverId}: ${config.command} ${(config.args || []).join(" ")}`);
+        const envVars = {
+          ...process.env,
+          ...(config.env || {}),
+          ...authHeaders,
+        };
+        transport = new StdioClientTransport({
+          command: config.command,
+          args: config.args || [],
+          env: envVars,
+        });
+      } else if (server.transportType === "docker" || (server.transportType === "stdio" && config.useDocker)) {
+        // Docker sidecar transport
         let sidecarConfig: {
           image?: string;
           command?: string;
@@ -153,7 +166,7 @@ export class UpstreamConnectionManager {
           .run();
       }
 
-      // Remove any tools no longer exposed by server
+      // Remove any tools no longer exposed by server (only if tools list returned)
       const currentToolNames = discoveredTools.map((t) => t.name);
       if (currentToolNames.length > 0) {
         db.delete(mcpTools)
@@ -163,10 +176,6 @@ export class UpstreamConnectionManager {
               notInArray(mcpTools.name, currentToolNames)
             )
           )
-          .run();
-      } else {
-        db.delete(mcpTools)
-          .where(eq(mcpTools.serverId, serverId))
           .run();
       }
 
@@ -270,11 +279,15 @@ export class UpstreamConnectionManager {
     const servers = db
       .select({ id: mcpServers.id })
       .from(mcpServers)
-      .where(eq(mcpServers.status, "connected"))
+      .where(ne(mcpServers.status, "need_auth"))
       .all();
 
     for (const server of servers) {
-      await this.connectServer(server.id);
+      try {
+        await this.connectServer(server.id);
+      } catch (err: any) {
+        console.error(`[UpstreamManager] Reconnect failed for ${server.id}:`, err?.message || err);
+      }
     }
   }
 
@@ -291,3 +304,10 @@ export class UpstreamConnectionManager {
 }
 
 export const upstreamManager = new UpstreamConnectionManager();
+
+process.on("SIGINT", async () => {
+  await upstreamManager.disconnectAll();
+});
+process.on("SIGTERM", async () => {
+  await upstreamManager.disconnectAll();
+});

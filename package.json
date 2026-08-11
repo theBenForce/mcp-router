@@ -6,14 +6,18 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "dev:web": "bun src/web/node_modules/vite/bin/vite.js src/web --config src/web/vite.config.ts",
+    "dev:web": "cd src/web && bun run dev",
     "start": "bun src/index.ts",
     "test": "DATABASE_PATH=:memory: bun test",
-    "build:web": "bun --cwd src/web run build",
+    "build:web": "cd src/web && bun run build",
     "build": "bun build:web",
     "db:generate": "bun --bun drizzle-kit generate",
     "db:migrate": "bun --bun drizzle-kit migrate",
-    "db:studio": "bun --bun drizzle-kit studio"
+    "db:studio": "bun --bun drizzle-kit studio",
+    "dev:all": "bun --watch src/index.ts & cd src/web && bun run dev",
+    "tauri": "tauri",
+    "dev:desktop": "tauri dev",
+    "build:desktop": "bun run build:web && bun build --compile src/index.ts --outfile src-tauri/bin/backend && tauri build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.1.0",
@@ -23,10 +27,16 @@
     "mustache": "^4.2.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
     "@types/bun": "latest",
     "@types/dockerode": "^4.0.1",
     "@types/mustache": "^4.2.6",
     "drizzle-kit": "^0.31.10",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "semantic-release": "^24.2.1",
+    "@semantic-release/commit-analyzer": "^13.0.0",
+    "@semantic-release/release-notes-generator": "^14.0.1",
+    "@semantic-release/github": "^11.0.1",
+    "@semantic-release/npm": "^12.0.1"
   }
 }

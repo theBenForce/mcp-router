@@ -230,4 +230,44 @@ describe("Servers & Tools API", () => {
     const fetched = await getRes.json();
     expect(fetched.config.volumes).toEqual(["/home/user/data:/data:ro", "/var/log/mcp:/logs"]);
   });
+
+  test("cli_command authType creates server and POST /api/servers/:id/auth executes command", async () => {
+    const serverName = `cli-auth-server-${crypto.randomUUID().slice(0, 8)}`;
+    const payload = {
+      name: serverName,
+      description: "CLI auth server test",
+      transportType: "stdio",
+      config: { command: "npx", args: ["-y", "mcp-server-test"] },
+      authType: "cli_command",
+      authData: { command: 'echo "Auth command executed successfully"' },
+    };
+
+    const createRes = await app.fetch(
+      new Request("http://localhost/api/servers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(created.auth_type).toBe("cli_command");
+    expect(created.auth_data.command).toBe('echo "Auth command executed successfully"');
+
+    const authRes = await app.fetch(
+      new Request(`http://localhost/api/servers/${created.id}/auth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+    );
+
+    expect(authRes.status).toBe(200);
+    const authResult = await authRes.json();
+    expect(authResult.success).toBe(true);
+    expect(authResult.exitCode).toBe(0);
+    expect(authResult.output).toContain("Auth command executed successfully");
+  });
 });
+

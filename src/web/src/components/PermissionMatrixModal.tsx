@@ -185,14 +185,90 @@ export const PermissionMatrixModal: React.FC<PermissionMatrixModalProps> = ({
     }
   };
 
+  const normalizePermissions = (rawPermissions: PermissionRule[]): PermissionRule[] => {
+    const result: PermissionRule[] = [];
+    const serverMap = new Map<string, PermissionRule[]>();
+    const promptRules: PermissionRule[] = [];
+
+    for (const rule of rawPermissions) {
+      if (rule.promptId) {
+        promptRules.push({ promptId: rule.promptId });
+        continue;
+      }
+      if (!rule.serverId) continue;
+
+      if (!serverMap.has(rule.serverId)) {
+        serverMap.set(rule.serverId, []);
+      }
+      serverMap.get(rule.serverId)!.push(rule);
+    }
+
+    for (const [serverId, rules] of serverMap.entries()) {
+      const server = servers.find((s) => s.id === serverId);
+
+      // If server has an explicit "all tools" rule
+      if (rules.some((r) => !r.toolId && (!r.actionType && !r.action_type))) {
+        result.push({ serverId, toolId: null, actionType: null });
+        continue;
+      }
+
+      if (!server || server.tools.length === 0) {
+        result.push(...rules);
+        continue;
+      }
+
+      const totalToolsCount = server.tools.length;
+      const selectedToolIds = new Set<string>();
+
+      for (const t of server.tools) {
+        const type = t.action_type || "write";
+        const isSelectedByAction = rules.some(
+          (r) => !r.toolId && (r.actionType === type || r.action_type === type)
+        );
+        const isSelectedByToolId = rules.some((r) => r.toolId === t.id);
+        if (isSelectedByAction || isSelectedByToolId) {
+          selectedToolIds.add(t.id);
+        }
+      }
+
+      // If ALL server tools are selected -> compress to a single server-wide rule
+      if (selectedToolIds.size === totalToolsCount && totalToolsCount > 0) {
+        result.push({ serverId, toolId: null, actionType: null });
+        continue;
+      }
+
+      // Group server tools by action_type
+      const actionCategories = (["read", "write", "delete", "execute"] as const);
+      for (const cat of actionCategories) {
+        const catTools = server.tools.filter((t) => (t.action_type || "write") === cat);
+        if (catTools.length === 0) continue;
+
+        const catSelectedTools = catTools.filter((t) => selectedToolIds.has(t.id));
+
+        if (catSelectedTools.length === catTools.length) {
+          // ALL tools in this action category selected -> store category rule
+          result.push({ serverId, toolId: null, actionType: cat });
+        } else {
+          // Partial category selection -> store specific toolId rules
+          for (const t of catSelectedTools) {
+            result.push({ serverId, toolId: t.id });
+          }
+        }
+      }
+    }
+
+    return [...result, ...promptRules];
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
+      const normalizedPermissions = normalizePermissions(selectedPermissions);
       const res = await fetch(`/api/keys/${keyId}/permissions`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ permissions: selectedPermissions }),
+        body: JSON.stringify({ permissions: normalizedPermissions }),
       });
 
       if (!res.ok) {
@@ -210,7 +286,7 @@ export const PermissionMatrixModal: React.FC<PermissionMatrixModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-100 max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0">
+      <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-100 w-[92vw] sm:max-w-5xl max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0 shadow-2xl">
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b border-zinc-800 flex flex-row items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -248,7 +324,7 @@ export const PermissionMatrixModal: React.FC<PermissionMatrixModalProps> = ({
                 {servers.length === 0 ? (
                   <div className="py-4 text-center text-xs text-zinc-500 font-mono">No MCP servers registered.</div>
                 ) : (
-                  <Accordion type="multiple" defaultValue={servers.map((s) => s.id)} className="space-y-3">
+                  <Accordion type="multiple" className="space-y-3">
                     {servers.map((server) => {
                       const serverAll = isServerAllSelected(server.id);
 
@@ -324,7 +400,7 @@ export const PermissionMatrixModal: React.FC<PermissionMatrixModalProps> = ({
                           <AccordionContent>
                             {/* Categorized Tools Nested Accordion Groups */}
                             {server.tools.length > 0 ? (
-                              <Accordion type="multiple" defaultValue={["read", "write", "delete", "execute"]} className="space-y-2 pt-2">
+                              <Accordion type="multiple" className="space-y-2 pt-2">
                                 {(["read", "write", "delete", "execute"] as const).map((type) => {
                                   const categoryTools = toolsByAction[type];
                                   if (categoryTools.length === 0) return null;
@@ -364,7 +440,7 @@ export const PermissionMatrixModal: React.FC<PermissionMatrixModalProps> = ({
                                         </div>
                                       </AccordionTrigger>
                                       <AccordionContent>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 pb-1">
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-1 pb-1">
                                           {categoryTools.map((tool) => {
                                             const checked = isToolSelected(server.id, tool.id, tool.action_type);
                                             return (
@@ -415,7 +491,7 @@ export const PermissionMatrixModal: React.FC<PermissionMatrixModalProps> = ({
                 {prompts.length === 0 ? (
                   <div className="py-4 text-center text-xs text-zinc-500 font-mono">No prompts defined.</div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     {prompts.map((prompt) => {
                       const checked = isPromptSelected(prompt.id);
                       return (

@@ -27,11 +27,10 @@ const WRITE_VERBS = [
  * based on heuristics matching tool name and description.
  */
 export function classifyToolAction(toolName: string, description: string = ""): ActionType {
-  const normalizedName = toolName.toLowerCase();
-  
-  // Extract words/tokens from tool name (handling camelCase, snake_case, kebab-case)
-  const tokens = normalizedName
+  // Extract words/tokens from tool name (handling camelCase, PascalCase, snake_case, kebab-case)
+  const tokens = toolName
     .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
     .toLowerCase()
     .split(/[^a-z0-9]+/);
 

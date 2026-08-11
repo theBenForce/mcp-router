@@ -1,9 +1,13 @@
 node_modules/
 dist/
-public/
 data/
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
 .DS_Store
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/
+

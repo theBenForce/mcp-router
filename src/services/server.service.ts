@@ -8,7 +8,7 @@ export interface CreateServerInput {
   description?: string;
   transportType: "stdio" | "docker" | "sse" | "streamable-http";
   config: Record<string, unknown>;
-  authType?: "none" | "api_key" | "bearer" | "oauth2";
+  authType?: "none" | "api_key" | "bearer" | "oauth2" | "cli_command";
   authData?: Record<string, unknown>;
 }
 
@@ -17,7 +17,7 @@ export interface UpdateServerInput {
   description?: string;
   transportType?: "stdio" | "docker" | "sse" | "streamable-http";
   config?: Record<string, unknown>;
-  authType?: "none" | "api_key" | "bearer" | "oauth2";
+  authType?: "none" | "api_key" | "bearer" | "oauth2" | "cli_command";
   authData?: Record<string, unknown>;
 }
 
@@ -175,6 +175,51 @@ export class ServerService {
     await upstreamManager.disconnectServer(id);
     return true;
   }
+
+  async runAuthCommand(id: string, customCommand?: string) {
+    const server = this.getServer(id);
+    if (!server) {
+      throw new Error(`Server with id ${id} not found`);
+    }
+
+    const authData = server.auth_data || {};
+    const config = server.config || {};
+    const cmdToRun = customCommand || authData.command || authData.cliCommand || config.authCommand;
+
+    if (!cmdToRun || typeof cmdToRun !== "string" || !cmdToRun.trim()) {
+      throw new Error(`No CLI Auth Command configured for server "${server.name}"`);
+    }
+
+    const { exec } = await import("node:child_process");
+
+    return new Promise<{ success: boolean; exitCode: number; output: string; error?: string }>((resolve) => {
+      console.log(`[ServerService] Running auth command for ${server.name} (${id}): ${cmdToRun}`);
+
+      const child = exec(cmdToRun, {
+        timeout: 60000,
+        env: { ...process.env, ...(config.env || {}) },
+      }, async (error, stdout, stderr) => {
+        const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+        const exitCode = error ? ((error as any).code ?? 1) : 0;
+        const success = exitCode === 0;
+
+        if (success) {
+          console.log(`[ServerService] Auth command succeeded for ${id}, triggering reconnect...`);
+          this.connectServer(id).catch((err) => {
+            console.error(`[ServerService] Reconnect after auth failed for ${id}:`, err.message);
+          });
+        }
+
+        resolve({
+          success,
+          exitCode: typeof exitCode === "number" ? exitCode : 1,
+          output: output || (success ? "Command completed with no output." : "Command failed."),
+          error: error ? error.message : undefined,
+        });
+      });
+    });
+  }
 }
 
 export const serverService = new ServerService();
+

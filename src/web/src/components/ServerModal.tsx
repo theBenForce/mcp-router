@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Server, Terminal, Globe, Container, Key, Shield, Plus, Trash2 } from "lucide-react";
+import { X, Server, Terminal, Globe, Container, Key, Shield, Plus, Trash2, Cpu, Sparkles, Folder } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -11,6 +11,44 @@ export interface ServerModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
+
+const PRESET_SERVERS = [
+  {
+    name: "Filesystem",
+    description: "Node.js official filesystem adapter",
+    command: "npx",
+    argsStr: "-y @modelcontextprotocol/server-filesystem /Users",
+    executorType: "host" as const,
+  },
+  {
+    name: "Git Repository",
+    description: "Python official git MCP server",
+    command: "uvx",
+    argsStr: "mcp-server-git",
+    executorType: "host" as const,
+  },
+  {
+    name: "Memory Graph",
+    description: "Knowledge graph memory MCP server",
+    command: "npx",
+    argsStr: "-y @modelcontextprotocol/server-memory",
+    executorType: "host" as const,
+  },
+  {
+    name: "SQLite Explorer",
+    description: "Python SQLite database adapter",
+    command: "uvx",
+    argsStr: "mcp-server-sqlite --db-path ./app.db",
+    executorType: "host" as const,
+  },
+  {
+    name: "Fetch Web",
+    description: "Node.js web fetch tool",
+    command: "npx",
+    argsStr: "-y @modelcontextprotocol/server-fetch",
+    executorType: "host" as const,
+  },
+];
 
 /**
  * Minimal docker run command parser for the frontend.
@@ -76,6 +114,8 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [transportType, setTransportType] = useState<"stdio" | "docker" | "sse" | "streamable-http">("streamable-http");
+  const [executorType, setExecutorType] = useState<"host" | "docker">("host");
+  const [cwd, setCwd] = useState("");
 
   // Stdio fields
   const [command, setCommand] = useState("npx");
@@ -92,10 +132,86 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   const [volumes, setVolumes] = useState<{ hostPath: string; containerPath: string }[]>([]);
 
   // Auth fields
-  const [authType, setAuthType] = useState<"none" | "bearer" | "api_key" | "oauth2">("none");
+  const [authType, setAuthType] = useState<"none" | "bearer" | "api_key" | "oauth2" | "cli_command">("none");
   const [bearerToken, setBearerToken] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [headerName, setHeaderName] = useState("X-API-Key");
+  const [cliCommand, setCliCommand] = useState("");
+  const [scopes, setScopes] = useState("");
+  const [discoveredScopes, setDiscoveredScopes] = useState<string[]>([]);
+  const [discovering, setDiscovering] = useState(false);
+
+  const fetchDiscoveredScopes = async (endpointUrl: string) => {
+    if (!endpointUrl || !endpointUrl.startsWith("http")) return;
+    setDiscovering(true);
+    try {
+      const res = await fetch(`/api/oauth/discover?url=${encodeURIComponent(endpointUrl)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.scopes_supported) && data.scopes_supported.length > 0) {
+          setDiscoveredScopes(data.scopes_supported);
+        } else {
+          setDiscoveredScopes([]);
+        }
+      }
+    } catch (e) {
+      setDiscoveredScopes([]);
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const [scopeInput, setScopeInput] = useState("");
+
+  const scopeList = scopes.trim().split(/\s+/).filter(Boolean);
+
+  const addScopeTag = (val: string) => {
+    const trimmed = val.trim();
+    if (!trimmed) return;
+    const tokens = trimmed.split(/[\s,]+/).filter(Boolean);
+    const set = new Set(scopeList);
+    for (const t of tokens) {
+      set.add(t);
+    }
+    setScopes(Array.from(set).join(" "));
+    setScopeInput("");
+  };
+
+  const removeScopeTag = (tagToRemove: string) => {
+    setScopes(scopeList.filter((s) => s !== tagToRemove).join(" "));
+  };
+
+  const handleScopeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === " " || e.key === ",") {
+      e.preventDefault();
+      addScopeTag(scopeInput);
+    } else if (e.key === "Backspace" && scopeInput === "" && scopeList.length > 0) {
+      e.preventDefault();
+      removeScopeTag(scopeList[scopeList.length - 1]);
+    }
+  };
+
+  const handleScopePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData("text");
+    addScopeTag(text);
+  };
+
+  const toggleScope = (scopeToToggle: string) => {
+    if (scopeList.includes(scopeToToggle)) {
+      removeScopeTag(scopeToToggle);
+    } else {
+      addScopeTag(scopeToToggle);
+    }
+  };
+
+  const addAllDiscoveredScopes = () => {
+    const currentSet = new Set(scopeList);
+    for (const ds of discoveredScopes) {
+      currentSet.add(ds);
+    }
+    setScopes(Array.from(currentSet).join(" "));
+  };
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,9 +250,13 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         return [];
       };
 
+      const eType = server.executor_type || server.executorType || (tType === "docker" ? "docker" : "host");
+      setExecutorType(eType);
+
       if (tType === "stdio") {
         setCommand(cfg.command || "npx");
         setArgsStr(Array.isArray(cfg.args) ? cfg.args.join(" ") : cfg.args || "");
+        setCwd(cfg.cwd || "");
         setImage(cfg.image || "");
         if (cfg.env && typeof cfg.env === "object") {
           setEnvVars(Object.entries(cfg.env).map(([k, v]) => ({ key: k, value: String(v) })));
@@ -159,19 +279,29 @@ export const ServerModal: React.FC<ServerModalProps> = ({
 
       const aType = server.auth_type || server.authType || "none";
       setAuthType(aType);
+      setCliCommand(authData.command || authData.cliCommand || cfg.authCommand || "");
+      const initialScopes = authData.scopes || authData.scope || cfg.scopes || cfg.scope || "";
+      setScopes(initialScopes);
       if (aType === "bearer") {
         setBearerToken(authData.token || "");
       } else if (aType === "api_key") {
         setApiKey(authData.apiKey || "");
         setHeaderName(authData.headerName || "X-API-Key");
       }
+      if (aType === "oauth2" && cfg.url) {
+        fetchDiscoveredScopes(cfg.url);
+      } else {
+        setDiscoveredScopes([]);
+      }
     } else {
       // Default initial state for Create mode
       setName("");
       setDescription("");
       setTransportType("streamable-http");
+      setExecutorType("host");
       setCommand("npx");
       setArgsStr("-y @modelcontextprotocol/server-filesystem /data");
+      setCwd("");
       setImage("");
       setUrl("");
       setRawCommand("");
@@ -182,6 +312,8 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       setBearerToken("");
       setApiKey("");
       setHeaderName("X-API-Key");
+      setCliCommand("");
+      setScopes("");
     }
     setError(null);
   }, [isOpen, server]);
@@ -199,6 +331,15 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         setName(parsed.inferredName);
       }
     }
+  };
+
+  const applyPreset = (preset: typeof PRESET_SERVERS[number]) => {
+    setName(preset.name);
+    setDescription(preset.description);
+    setTransportType("stdio");
+    setExecutorType(preset.executorType);
+    setCommand(preset.command);
+    setArgsStr(preset.argsStr);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -232,6 +373,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         config = {
           command: command.trim(),
           args,
+          ...(cwd.trim() ? { cwd: cwd.trim() } : {}),
           ...(image.trim() ? { image: image.trim() } : {}),
           ...(Object.keys(envObj).length > 0 ? { env: envObj } : {}),
           ...(volumeStrs.length > 0 ? { volumes: volumeStrs } : {}),
@@ -260,6 +402,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         authData = { token: bearerToken.trim() };
       } else if (authType === "api_key") {
         authData = { apiKey: apiKey.trim(), headerName: headerName.trim() };
+      } else if (authType === "cli_command") {
+        authData = { command: cliCommand.trim() };
+      } else if (authType === "oauth2") {
+        const existingAuthData = typeof server?.auth_data === "object" && server.auth_data !== null ? server.auth_data : {};
+        authData = { ...existingAuthData, scopes: scopes.trim() };
       }
 
       const endpoint = isEdit ? `/api/servers/${server.id}` : "/api/servers";
@@ -272,6 +419,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
           name: name.trim(),
           description: description.trim(),
           transportType,
+          executorType: transportType === "stdio" ? executorType : (transportType === "docker" ? "docker" : "host"),
           config,
           authType,
           authData,
@@ -380,7 +528,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                 }`}
               >
                 <Terminal className="h-3.5 w-3.5" />
-                <span>Stdio Sidecar</span>
+                <span>Stdio Command</span>
               </Button>
               <Button
                 type="button"
@@ -400,13 +548,74 @@ export const ServerModal: React.FC<ServerModalProps> = ({
 
           {/* Stdio Specific Inputs */}
           {transportType === "stdio" ? (
-            <div className="space-y-3 p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
+            <div className="space-y-3.5 p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
+              {/* Quick Presets */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-indigo-400 mb-1.5 flex items-center gap-1">
+                  <Sparkles className="h-3 w-3" />
+                  <span>Quick Presets (npx & uvx)</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESET_SERVERS.map((preset) => (
+                    <Button
+                      key={preset.name}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyPreset(preset)}
+                      className="h-7 text-xs bg-zinc-900 hover:bg-indigo-950/50 border-zinc-800 hover:border-indigo-500/50 text-zinc-300 hover:text-indigo-300"
+                    >
+                      <span className="font-mono text-[10px] text-indigo-400 mr-1">{preset.command}</span>
+                      <span>{preset.name}</span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Execution Mode Selector */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">Execution Environment</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExecutorType("host")}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
+                      executorType === "host"
+                        ? "bg-indigo-500/10 border-indigo-500/60 text-indigo-300 shadow-sm shadow-indigo-500/10"
+                        : "bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                    }`}
+                  >
+                    <Cpu className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-xs font-semibold block text-zinc-200">Host OS Direct</span>
+                      <span className="text-[11px] text-zinc-400 leading-tight block">Runs npx/uvx directly on host system</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExecutorType("docker")}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
+                      executorType === "docker"
+                        ? "bg-cyan-500/10 border-cyan-500/60 text-cyan-300 shadow-sm shadow-cyan-500/10"
+                        : "bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                    }`}
+                  >
+                    <Container className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-xs font-semibold block text-zinc-200">Docker Sidecar</span>
+                      <span className="text-[11px] text-zinc-400 leading-tight block">Runs in isolated Docker container</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1">Command *</label>
                 <Input
                   type="text"
                   required
-                  placeholder="npx, python, uvx"
+                  placeholder="npx, uvx, bunx, python"
                   value={command}
                   onChange={(e) => setCommand(e.target.value)}
                   className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
@@ -424,16 +633,32 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Custom Docker Image (Optional)</label>
-                <Input
-                  type="text"
-                  placeholder="Defaults to node:22-alpine or ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
-                  value={image}
-                  onChange={(e) => setImage(e.target.value)}
-                  className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
-                />
-              </div>
+              {executorType === "host" ? (
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1 flex items-center gap-1">
+                    <Folder className="h-3 w-3 text-indigo-400" />
+                    <span>Working Directory (cwd) (Optional)</span>
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. /Users/username/projects or leave empty for default"
+                    value={cwd}
+                    onChange={(e) => setCwd(e.target.value)}
+                    className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Custom Docker Image (Optional)</label>
+                  <Input
+                    type="text"
+                    placeholder="Defaults to node:22-alpine or ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
+                    value={image}
+                    onChange={(e) => setImage(e.target.value)}
+                    className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
+                  />
+                </div>
+              )}
 
               {/* Environment Variables */}
               <div>
@@ -733,20 +958,155 @@ export const ServerModal: React.FC<ServerModalProps> = ({
             >
               <option value="none">None / Public</option>
               <option value="oauth2">OAuth 2.1 (PKCE / Auto-Discovery)</option>
+              <option value="cli_command">CLI Auth Command</option>
               <option value="bearer">Bearer Token</option>
               <option value="api_key">API Key Header</option>
             </select>
           </div>
 
+          {authType === "cli_command" && (
+            <div>
+              <label className="block text-xs font-medium text-zinc-300 mb-1">CLI Auth Command *</label>
+              <Input
+                type="text"
+                required
+                placeholder="e.g. uvx garmin-mcp login"
+                value={cliCommand}
+                onChange={(e) => setCliCommand(e.target.value)}
+                className="bg-zinc-950 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
+              />
+              <p className="text-[11px] text-zinc-500 mt-1">
+                Non-interactive auth command to execute before connecting (e.g. CLI auth or token generator script).
+              </p>
+            </div>
+          )}
+
           {authType === "oauth2" && (
-            <Alert className="bg-indigo-500/10 border-indigo-500/20 text-indigo-300 text-xs">
-              <AlertDescription>
-                <p className="font-semibold">OAuth 2.1 Auto-Discovery Enabled</p>
-                <p className="text-zinc-400 text-[11px] mt-0.5">
-                  Uses standard Metadata Discovery (RFC 8414/9728) and Dynamic Client Registration (RFC 7591). After adding or updating this server, click "Authenticate" on the server list card to authorize via browser.
+            <div className="space-y-2">
+              <Alert className="bg-indigo-500/10 border-indigo-500/20 text-indigo-300 text-xs">
+                <AlertDescription>
+                  <p className="font-semibold">OAuth 2.1 Auto-Discovery Enabled</p>
+                  <p className="text-zinc-400 text-[11px] mt-0.5">
+                    Uses standard Metadata Discovery (RFC 8414/9728) and Dynamic Client Registration (RFC 7591). After adding or updating this server, click "Authenticate" on the server list card to authorize via browser.
+                  </p>
+                </AlertDescription>
+              </Alert>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-zinc-300">
+                    OAuth Scopes (Optional)
+                  </label>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    disabled={discovering || !url.startsWith("http")}
+                    onClick={() => fetchDiscoveredScopes(url)}
+                    className="h-auto p-0 text-[11px] text-cyan-400 hover:text-cyan-300 gap-1"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    <span>{discovering ? "Discovering..." : "Discover Server Scopes"}</span>
+                  </Button>
+                </div>
+
+                {/* Multi-Select Tag Input Box */}
+                <div
+                  className="min-h-[38px] p-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs font-mono text-zinc-100 focus-within:border-indigo-500 flex flex-wrap items-center gap-1.5 cursor-text"
+                  onClick={(e) => {
+                    const inputEl = e.currentTarget.querySelector("input");
+                    if (inputEl) inputEl.focus();
+                  }}
+                >
+                  {scopeList.map((tag) => (
+                    <span
+                      key={tag}
+                      className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs px-2 py-0.5 rounded-md font-mono inline-flex items-center gap-1.5 group transition-colors"
+                    >
+                      <span>{tag}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeScopeTag(tag);
+                        }}
+                        className="text-indigo-400 hover:text-rose-400 font-bold focus:outline-none leading-none text-sm"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    list="discovered-scopes-list"
+                    placeholder={
+                      scopeList.length === 0
+                        ? "Type custom scope and press Enter/Space or paste list..."
+                        : "Add scope..."
+                    }
+                    value={scopeInput}
+                    onChange={(e) => setScopeInput(e.target.value)}
+                    onKeyDown={handleScopeKeyDown}
+                    onPaste={handleScopePaste}
+                    onBlur={() => {
+                      if (scopeInput.trim()) {
+                        addScopeTag(scopeInput);
+                      }
+                    }}
+                    className="bg-transparent border-none text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none flex-1 min-w-[140px] px-1"
+                  />
+                </div>
+
+                <datalist id="discovered-scopes-list">
+                  {discoveredScopes.map((sc, i) => (
+                    <option key={i} value={sc} />
+                  ))}
+                </datalist>
+
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Type custom scopes or press Space/Enter to add tags. Select advertised scopes below.
                 </p>
-              </AlertDescription>
-            </Alert>
+
+                {/* Discovered Scopes Autocomplete Chips */}
+                {discoveredScopes.length > 0 && (
+                  <div className="mt-2.5 space-y-1.5 bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/80">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-zinc-400 font-medium flex items-center gap-1">
+                        <Sparkles className="h-3 w-3 text-cyan-400" /> Advertised Server Scopes ({discoveredScopes.length}):
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={addAllDiscoveredScopes}
+                        className="h-5 px-1.5 text-[10px] text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10"
+                      >
+                        Add All Advertised
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                      {discoveredScopes.map((sc) => {
+                        const isSelected = scopeList.includes(sc);
+                        return (
+                          <button
+                            key={sc}
+                            type="button"
+                            onClick={() => toggleScope(sc)}
+                            className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors flex items-center gap-1 ${
+                              isSelected
+                                ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                                : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-zinc-700/50"
+                            }`}
+                          >
+                            {isSelected ? "✓ " : "+ "}
+                            {sc}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {authType === "bearer" && (

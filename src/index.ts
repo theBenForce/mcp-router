@@ -13,6 +13,7 @@ import auditController from "./api/audit.controller";
 import promptsController from "./api/prompts.controller";
 import oauthController from "./api/oauth.controller";
 import downstreamHandler from "./mcp/downstream/handler";
+import { upstreamManager } from "./mcp/upstream/manager";
 
 const app = new Hono();
 
@@ -51,6 +52,11 @@ if (fs.existsSync(staticDir)) {
 
 // Initialize DB on server start
 getDb();
+
+// Reconnect servers and refresh tool definitions on startup
+upstreamManager.reconnectAll().catch((err) => {
+  console.error("[Startup] Server reconnect failed:", err);
+});
 
 console.log(`🚀 MCP Router starting on ${config.host}:${config.port}`);
 
