@@ -12,6 +12,7 @@ import keysController from "./api/keys.controller";
 import auditController from "./api/audit.controller";
 import promptsController from "./api/prompts.controller";
 import oauthController from "./api/oauth.controller";
+import configController from "./api/config.controller";
 import downstreamHandler from "./mcp/downstream/handler";
 
 const app = new Hono();
@@ -35,6 +36,7 @@ app.route("/api/keys", keysController);
 app.route("/api/audit", auditController);
 app.route("/api/prompts", promptsController);
 app.route("/api/oauth", oauthController);
+app.route("/api/config", configController);
 
 // Downstream MCP Proxy Transports (SSE & Streamable HTTP)
 app.route("/", downstreamHandler);
@@ -53,6 +55,7 @@ if (fs.existsSync(staticDir)) {
 getDb();
 
 console.log(`🚀 MCP Router starting on ${config.host}:${config.port}`);
+console.log(JSON.stringify({ event: "server_started", port: config.port, host: config.host }));
 
 export default {
   port: config.port,
