@@ -63,6 +63,7 @@ export class UpstreamConnectionManager {
             command: config.command,
             args: config.args,
             env: { ...config.env, ...authHeaders },
+            cwd: config.cwd,
           };
 
           console.log(`[UpstreamManager] Spawning host process for ${serverId} (${server.name}), command: ${config.command}`);

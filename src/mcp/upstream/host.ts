@@ -81,12 +81,16 @@ export class HostProcessManager {
       this.activeProcesses.set(serverId, proc);
 
       // Trapping spawn errors (e.g. ENOENT command not found) immediately
-      proc.on("error", (err: Error) => {
-        console.error(`[HostProcessManager] Spawn error for ${serverId}:`, err.message);
+      proc.on("error", (err: any) => {
+        let msg = err.message || String(err);
+        if (err.code === "ENOENT") {
+          msg = `Host command '${command}' not found on PATH. Please ensure '${command}' (Node.js/uv/Bun) is installed or switch execution mode to Docker sidecar.`;
+        }
+        console.error(`[HostProcessManager] Spawn error for ${serverId}:`, msg);
         this.activeProcesses.delete(serverId);
         if (!isSettled) {
           isSettled = true;
-          reject(err);
+          reject(new Error(msg));
         }
       });
 
