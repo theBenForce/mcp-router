@@ -197,47 +197,6 @@ describe("Servers & Tools API", () => {
     expect(fetched.config.env.DEBUG_LOGS).toBe("true");
   });
 
-  test("stdio host execution type accepts executorType host and custom cwd", async () => {
-    const serverName = `host-stdio-server-${crypto.randomUUID().slice(0, 8)}`;
-    const payload = {
-      name: serverName,
-      description: "Host stdio server with custom cwd",
-      transportType: "stdio",
-      executorType: "host",
-      config: {
-        command: "uvx",
-        args: ["mcp-server-git"],
-        cwd: "/tmp",
-        env: {
-          GIT_AUTHOR_NAME: "MCP Test",
-        },
-      },
-      authType: "none",
-    };
-
-    const createRes = await app.fetch(
-      new Request("http://localhost/api/servers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-    );
-
-    expect(createRes.status).toBe(201);
-    const created = await createRes.json();
-    expect(created.id).toBeDefined();
-    expect(created.transport_type).toBe("stdio");
-    expect(created.executor_type).toBe("host");
-    expect(created.config.command).toBe("uvx");
-    expect(created.config.cwd).toBe("/tmp");
-
-    const getRes = await app.fetch(new Request(`http://localhost/api/servers/${created.id}`));
-    expect(getRes.status).toBe(200);
-    const fetched = await getRes.json();
-    expect(fetched.executor_type).toBe("host");
-    expect(fetched.config.cwd).toBe("/tmp");
-  });
-
   test("sidecar transport types accept and persist volume mappings", async () => {
     const serverName = `sidecar-vol-server-${crypto.randomUUID().slice(0, 8)}`;
     const payload = {
@@ -271,4 +230,44 @@ describe("Servers & Tools API", () => {
     const fetched = await getRes.json();
     expect(fetched.config.volumes).toEqual(["/home/user/data:/data:ro", "/var/log/mcp:/logs"]);
   });
+
+  test("cli_command authType creates server and POST /api/servers/:id/auth executes command", async () => {
+    const serverName = `cli-auth-server-${crypto.randomUUID().slice(0, 8)}`;
+    const payload = {
+      name: serverName,
+      description: "CLI auth server test",
+      transportType: "stdio",
+      config: { command: "npx", args: ["-y", "mcp-server-test"] },
+      authType: "cli_command",
+      authData: { command: 'echo "Auth command executed successfully"' },
+    };
+
+    const createRes = await app.fetch(
+      new Request("http://localhost/api/servers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(created.auth_type).toBe("cli_command");
+    expect(created.auth_data.command).toBe('echo "Auth command executed successfully"');
+
+    const authRes = await app.fetch(
+      new Request(`http://localhost/api/servers/${created.id}/auth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+    );
+
+    expect(authRes.status).toBe(200);
+    const authResult = await authRes.json();
+    expect(authResult.success).toBe(true);
+    expect(authResult.exitCode).toBe(0);
+    expect(authResult.output).toContain("Auth command executed successfully");
+  });
 });
+

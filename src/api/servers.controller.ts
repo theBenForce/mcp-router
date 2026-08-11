@@ -74,4 +74,31 @@ app.post("/:id/disconnect", async (c) => {
   return c.json({ success: true, server });
 });
 
+// Run CLI Auth command
+app.post("/:id/auth", async (c) => {
+  const id = c.req.param("id");
+  try {
+    let customCommand: string | undefined;
+    try {
+      const body = await c.req.json();
+      if (body && typeof body.command === "string") {
+        customCommand = body.command;
+      }
+    } catch {
+      // Body may be empty
+    }
+
+    const result = await serverService.runAuthCommand(id, customCommand);
+    const updatedServer = serverService.getServer(id);
+
+    return c.json({
+      ...result,
+      server: updatedServer,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, exitCode: 1, output: "", error: err.message }, 500);
+  }
+});
+
 export default app;
+

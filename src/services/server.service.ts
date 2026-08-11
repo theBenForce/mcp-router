@@ -7,9 +7,8 @@ export interface CreateServerInput {
   name: string;
   description?: string;
   transportType: "stdio" | "docker" | "sse" | "streamable-http";
-  executorType?: "host" | "docker";
   config: Record<string, unknown>;
-  authType?: "none" | "api_key" | "bearer" | "oauth2";
+  authType?: "none" | "api_key" | "bearer" | "oauth2" | "cli_command";
   authData?: Record<string, unknown>;
 }
 
@@ -17,9 +16,8 @@ export interface UpdateServerInput {
   name?: string;
   description?: string;
   transportType?: "stdio" | "docker" | "sse" | "streamable-http";
-  executorType?: "host" | "docker";
   config?: Record<string, unknown>;
-  authType?: "none" | "api_key" | "bearer" | "oauth2";
+  authType?: "none" | "api_key" | "bearer" | "oauth2" | "cli_command";
   authData?: Record<string, unknown>;
 }
 
@@ -37,7 +35,6 @@ export class ServerService {
         website_url: mcpServers.websiteUrl,
         icons_json: mcpServers.iconsJson,
         transport_type: mcpServers.transportType,
-        executor_type: mcpServers.executorType,
         config_json: mcpServers.configJson,
         auth_type: mcpServers.authType,
         auth_data_json: mcpServers.authDataJson,
@@ -84,7 +81,6 @@ export class ServerService {
       website_url: server.websiteUrl,
       icons_json: server.iconsJson,
       transport_type: server.transportType,
-      executor_type: server.executorType,
       config_json: server.configJson,
       auth_type: server.authType,
       auth_data_json: server.authDataJson,
@@ -108,7 +104,6 @@ export class ServerService {
     const configJson = JSON.stringify(input.config);
     const authDataJson = JSON.stringify(input.authData || {});
     const authType = input.authType || "none";
-    const executorType = input.executorType || (input.transportType === "docker" ? "docker" : "host");
 
     db.insert(mcpServers)
       .values({
@@ -116,7 +111,6 @@ export class ServerService {
         name: input.name,
         description: input.description || "",
         transportType: input.transportType,
-        executorType,
         configJson,
         authType,
         authDataJson,
@@ -141,7 +135,6 @@ export class ServerService {
     const name = input.name ?? existing.name;
     const description = input.description ?? existing.description;
     const transportType = input.transportType ?? existing.transport_type;
-    const executorType = input.executorType ?? existing.executor_type;
     const configJson = input.config ? JSON.stringify(input.config) : existing.config_json;
     const authType = input.authType ?? existing.auth_type;
     const authDataJson = input.authData ? JSON.stringify(input.authData) : existing.auth_data_json;
@@ -151,7 +144,6 @@ export class ServerService {
         name,
         description,
         transportType,
-        executorType,
         configJson,
         authType,
         authDataJson,
@@ -183,6 +175,51 @@ export class ServerService {
     await upstreamManager.disconnectServer(id);
     return true;
   }
+
+  async runAuthCommand(id: string, customCommand?: string) {
+    const server = this.getServer(id);
+    if (!server) {
+      throw new Error(`Server with id ${id} not found`);
+    }
+
+    const authData = server.auth_data || {};
+    const config = server.config || {};
+    const cmdToRun = customCommand || authData.command || authData.cliCommand || config.authCommand;
+
+    if (!cmdToRun || typeof cmdToRun !== "string" || !cmdToRun.trim()) {
+      throw new Error(`No CLI Auth Command configured for server "${server.name}"`);
+    }
+
+    const { exec } = await import("node:child_process");
+
+    return new Promise<{ success: boolean; exitCode: number; output: string; error?: string }>((resolve) => {
+      console.log(`[ServerService] Running auth command for ${server.name} (${id}): ${cmdToRun}`);
+
+      const child = exec(cmdToRun, {
+        timeout: 60000,
+        env: { ...process.env, ...(config.env || {}) },
+      }, async (error, stdout, stderr) => {
+        const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+        const exitCode = error ? ((error as any).code ?? 1) : 0;
+        const success = exitCode === 0;
+
+        if (success) {
+          console.log(`[ServerService] Auth command succeeded for ${id}, triggering reconnect...`);
+          this.connectServer(id).catch((err) => {
+            console.error(`[ServerService] Reconnect after auth failed for ${id}:`, err.message);
+          });
+        }
+
+        resolve({
+          success,
+          exitCode: typeof exitCode === "number" ? exitCode : 1,
+          output: output || (success ? "Command completed with no output." : "Command failed."),
+          error: error ? error.message : undefined,
+        });
+      });
+    });
+  }
 }
 
 export const serverService = new ServerService();
+

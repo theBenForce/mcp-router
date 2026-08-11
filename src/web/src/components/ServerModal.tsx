@@ -132,10 +132,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   const [volumes, setVolumes] = useState<{ hostPath: string; containerPath: string }[]>([]);
 
   // Auth fields
-  const [authType, setAuthType] = useState<"none" | "bearer" | "api_key" | "oauth2">("none");
+  const [authType, setAuthType] = useState<"none" | "bearer" | "api_key" | "oauth2" | "cli_command">("none");
   const [bearerToken, setBearerToken] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [headerName, setHeaderName] = useState("X-API-Key");
+  const [cliCommand, setCliCommand] = useState("");
   const [scopes, setScopes] = useState("");
   const [discoveredScopes, setDiscoveredScopes] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
@@ -278,6 +279,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
 
       const aType = server.auth_type || server.authType || "none";
       setAuthType(aType);
+      setCliCommand(authData.command || authData.cliCommand || cfg.authCommand || "");
       const initialScopes = authData.scopes || authData.scope || cfg.scopes || cfg.scope || "";
       setScopes(initialScopes);
       if (aType === "bearer") {
@@ -310,6 +312,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       setBearerToken("");
       setApiKey("");
       setHeaderName("X-API-Key");
+      setCliCommand("");
       setScopes("");
     }
     setError(null);
@@ -399,6 +402,8 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         authData = { token: bearerToken.trim() };
       } else if (authType === "api_key") {
         authData = { apiKey: apiKey.trim(), headerName: headerName.trim() };
+      } else if (authType === "cli_command") {
+        authData = { command: cliCommand.trim() };
       } else if (authType === "oauth2") {
         const existingAuthData = typeof server?.auth_data === "object" && server.auth_data !== null ? server.auth_data : {};
         authData = { ...existingAuthData, scopes: scopes.trim() };
@@ -953,10 +958,28 @@ export const ServerModal: React.FC<ServerModalProps> = ({
             >
               <option value="none">None / Public</option>
               <option value="oauth2">OAuth 2.1 (PKCE / Auto-Discovery)</option>
+              <option value="cli_command">CLI Auth Command</option>
               <option value="bearer">Bearer Token</option>
               <option value="api_key">API Key Header</option>
             </select>
           </div>
+
+          {authType === "cli_command" && (
+            <div>
+              <label className="block text-xs font-medium text-zinc-300 mb-1">CLI Auth Command *</label>
+              <Input
+                type="text"
+                required
+                placeholder="e.g. uvx garmin-mcp login"
+                value={cliCommand}
+                onChange={(e) => setCliCommand(e.target.value)}
+                className="bg-zinc-950 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
+              />
+              <p className="text-[11px] text-zinc-500 mt-1">
+                Non-interactive auth command to execute before connecting (e.g. CLI auth or token generator script).
+              </p>
+            </div>
+          )}
 
           {authType === "oauth2" && (
             <div className="space-y-2">
