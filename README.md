@@ -64,10 +64,33 @@ flowchart TB
 ## 🚀 Quickstart
 
 ### Prerequisites
-- [Docker](https://www.docker.com/) installed and running on your host machine.
-- (Optional for local dev) [mise](https://mise.jdx.dev/) and [Bun](https://bun.sh/).
+- [Rust & Cargo](https://www.rust-lang.org/) (for Tauri desktop app development).
+- [mise](https://mise.jdx.dev/) and [Bun](https://bun.sh/).
+- (Optional) [Docker](https://www.docker.com/) if you explicitly want containerized sidecar isolation.
 
-### Option 1: Run with Docker Compose (Recommended)
+---
+
+### Option 1: Native Desktop Application with Tauri v2 (Recommended)
+
+1. **Install dependencies**:
+   ```bash
+   mise exec -- bun install
+   ```
+
+2. **Run Desktop App in Development Mode**:
+   ```bash
+   mise exec -- bun dev:desktop
+   ```
+   *Launches the native desktop window with hot-reloading dashboard and local Hono proxy gateway. Stdio MCP servers execute directly on your host OS (`npx`, `uvx`, `bun`, `python`) without needing Docker.*
+
+3. **Build Desktop App Bundle (.app / .dmg / executable)**:
+   ```bash
+   mise exec -- bun build:desktop
+   ```
+
+---
+
+### Option 2: Run with Docker Compose
 
 1. Clone the repository:
    ```bash
@@ -84,14 +107,14 @@ flowchart TB
 
 ---
 
-### Option 2: Local Development with Bun & Vite
+### Option 3: Local Web Development with Bun & Vite
 
 1. **Install dependencies**:
    ```bash
    mise exec -- bun install
    ```
 
-2. **Frontend Development with Instant Hot Reloading (Recommended for UI work)**:
+2. **Frontend Development with Instant Hot Reloading**:
    Run the backend API server and Vite dev server concurrently in two terminal tabs:
 
    - **Terminal 1 (Backend API on `http://localhost:5170`)**:
@@ -102,15 +125,7 @@ flowchart TB
      ```bash
      bun dev:web
      ```
-   *Open `http://localhost:5173` in your browser. Vite automatically proxies `/api`, `/sse`, and `/mcp` requests to the backend server while giving you instant React HMR.*
-
-3. **Single Production Build**:
-   Alternatively, build static assets into `src/web/dist` and serve everything from the Bun backend:
-   ```bash
-   bun run build:web
-   bun dev
-   ```
-   *Open `http://localhost:5170` in your browser.*
+   *Open `http://localhost:5173` in your browser.*
 
 ---
 
