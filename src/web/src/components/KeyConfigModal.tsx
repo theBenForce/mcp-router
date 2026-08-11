@@ -22,6 +22,7 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
   const [userKeyToken, setUserKeyToken] = useState("");
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [gatewayPort, setGatewayPort] = useState<number>(5170);
 
   useEffect(() => {
     if (isOpen && keyId) {
@@ -32,21 +33,29 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/servers");
-      const data = await res.json();
+      const [serversRes, configRes] = await Promise.all([
+        fetch("/api/servers"),
+        fetch("/api/config").catch(() => null),
+      ]);
+      const data = await serversRes.json();
       const connected = data.filter((s: any) => s.status === "connected");
       setServers(connected);
       setSelectedServers(connected.map((s: any) => s.id));
+
+      if (configRes && configRes.ok) {
+        const configData = await configRes.json();
+        if (configData.port) {
+          setGatewayPort(configData.port);
+        }
+      }
     } catch (err) {
-      console.error("Failed to load servers for config modal:", err);
+      console.error("Failed to load servers/config for modal:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!isOpen || !keyId) return null;
-
-  const origin = window.location.origin;
+  const origin = `${window.location.protocol}//${window.location.hostname}:${gatewayPort}`;
   const tokenPlaceholder = userKeyToken.trim() || "<YOUR_API_KEY>";
 
   const toggleServer = (id: string) => {
@@ -68,7 +77,7 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
         } else {
           mcpServersConfig["prompts"] = {
             command: "npx",
-            args: ["-y", "@modelcontextprotocol/server-sse", sseUrl],
+            args: ["-y", "mcp-remote", sseUrl],
           };
         }
       }
@@ -85,7 +94,7 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
         } else {
           mcpServersConfig[keyNameSlug] = {
             command: "npx",
-            args: ["-y", "@modelcontextprotocol/server-sse", sseUrl],
+            args: ["-y", "mcp-remote", sseUrl],
           };
         }
       }
@@ -98,7 +107,7 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
       } else {
         mcpServersConfig["mcp-router"] = {
           command: "npx",
-          args: ["-y", "@modelcontextprotocol/server-sse", sseUrl],
+          args: ["-y", "mcp-remote", sseUrl],
         };
       }
     }
