@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Key, ShieldCheck, Trash2, CheckCircle, Ban, Code, Settings2 } from "lucide-react";
+import { Plus, ShieldCheck, Trash2, CheckCircle, Ban, Code } from "lucide-react";
 import { CreateKeyModal } from "../components/CreateKeyModal";
 import { PermissionMatrixModal } from "../components/PermissionMatrixModal";
 import { KeyConfigModal } from "../components/KeyConfigModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { formatLocalDateTime } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -114,7 +115,7 @@ export const KeysPage: React.FC = () => {
                     </Button>
                   </TableCell>
                   <TableCell className="font-mono text-zinc-400">
-                    {new Date(key.created_at).toLocaleDateString()}
+                    {formatLocalDateTime(key.created_at, { year: 'numeric', month: 'numeric', day: 'numeric' })}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">

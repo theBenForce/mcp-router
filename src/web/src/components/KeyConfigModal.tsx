@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { X, Copy, Check, Terminal, Globe, Layers, Settings2 } from "lucide-react";
+import { Copy, Check, Terminal, Globe, Layers, Settings2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Button } from "./ui/button";
 
 interface KeyConfigModalProps {
   isOpen: boolean;
@@ -54,6 +56,8 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
       setLoading(false);
     }
   };
+
+  if (!isOpen) return null;
 
   const origin = `${window.location.protocol}//${window.location.hostname}:${gatewayPort}`;
   const tokenPlaceholder = userKeyToken.trim() || "<YOUR_API_KEY>";
@@ -124,29 +128,23 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="glass-panel w-full max-w-2xl rounded-2xl border border-zinc-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100 w-[92vw] max-w-2xl max-h-[88vh] overflow-hidden flex flex-col p-0 gap-0 shadow-2xl">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-950/40">
+        <DialogHeader className="px-6 py-4 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-900/60">
           <div>
-            <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
+            <DialogTitle className="text-base font-bold text-zinc-100 flex items-center gap-2">
               <Settings2 className="h-5 w-5 text-indigo-400" />
               <span>Export Client MCP Config</span>
-            </h2>
+            </DialogTitle>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Configuring MCP snippet for API Key: <span className="font-semibold text-zinc-200">{keyName}</span>
+              Configuring MCP snippet for API Key: <span className="font-semibold text-indigo-400 font-mono">{keyName}</span>
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Modal Content */}
-        <div className="p-6 overflow-y-auto space-y-6 text-xs">
+        <div className="p-6 overflow-y-auto space-y-6 text-xs flex-1">
           {/* Optional secret key input */}
           <div className="space-y-1.5">
             <label className="text-zinc-300 font-medium block">API Key Secret (Optional)</label>
@@ -155,7 +153,7 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
               placeholder="Paste secret token (e.g. mcpr_...) to populate URLs"
               value={userKeyToken}
               onChange={(e) => setUserKeyToken(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 font-mono text-xs focus:outline-none focus:border-indigo-500/50"
+              className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 font-mono text-xs focus:outline-none focus:border-indigo-500/50"
             />
           </div>
 
@@ -164,7 +162,7 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
             {/* Format Style */}
             <div className="space-y-2">
               <label className="text-zinc-300 font-medium block">Config Format</label>
-              <div className="grid grid-cols-3 gap-1.5 bg-zinc-950 p-1 rounded-lg border border-zinc-800">
+              <div className="grid grid-cols-3 gap-1.5 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setConfigStyle("url")}
@@ -204,7 +202,7 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
             {/* Routing Mode */}
             <div className="space-y-2">
               <label className="text-zinc-300 font-medium block">Proxy Endpoint Mode</label>
-              <div className="grid grid-cols-2 gap-1.5 bg-zinc-950 p-1 rounded-lg border border-zinc-800">
+              <div className="grid grid-cols-2 gap-1.5 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setRoutingMode("per-server")}
@@ -238,25 +236,25 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
             <div className="space-y-2 border-t border-zinc-800/60 pt-4">
               <label className="text-zinc-300 font-medium block">Included Servers & Resources</label>
               <div className="flex flex-wrap gap-2 pt-1">
-                <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-300 cursor-pointer hover:border-zinc-700">
+                <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 cursor-pointer hover:border-zinc-700">
                   <input
                     type="checkbox"
                     checked={includePrompts}
                     onChange={(e) => setIncludePrompts(e.target.checked)}
-                    className="rounded bg-zinc-900 border-zinc-700 text-indigo-500 focus:ring-0"
+                    className="rounded bg-zinc-950 border-zinc-700 text-indigo-500 focus:ring-0"
                   />
                   <span className="font-semibold text-indigo-300">Prompt Library</span>
                 </label>
                 {servers.map((s) => (
                   <label
                     key={s.id}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-300 cursor-pointer hover:border-zinc-700"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 cursor-pointer hover:border-zinc-700"
                   >
                     <input
                       type="checkbox"
                       checked={selectedServers.includes(s.id)}
                       onChange={() => toggleServer(s.id)}
-                      className="rounded bg-zinc-900 border-zinc-700 text-indigo-500 focus:ring-0"
+                      className="rounded bg-zinc-950 border-zinc-700 text-indigo-500 focus:ring-0"
                     />
                     <span>{s.server_title || s.name}</span>
                   </label>
@@ -272,9 +270,11 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
                 <Terminal className="h-4 w-4 text-emerald-400" />
                 <span>Generated Config JSON</span>
               </span>
-              <button
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={handleCopy}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30 transition-all font-mono text-[11px]"
+                className="flex items-center gap-1.5 h-7 px-3 bg-indigo-600/20 border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30 font-mono text-[11px]"
               >
                 {copied ? (
                   <>
@@ -287,15 +287,29 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
                     <span>Copy Config JSON</span>
                   </>
                 )}
-              </button>
+              </Button>
             </div>
 
-            <pre className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 font-mono text-[11px] overflow-x-auto leading-relaxed max-h-64 scrollbar-thin">
+            <pre className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono text-[11px] overflow-x-auto leading-relaxed max-h-64 scrollbar-thin">
               {jsonContent}
             </pre>
           </div>
         </div>
-      </div>
-    </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end px-6 py-3.5 border-t border-zinc-800/80 bg-zinc-900/60">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+          >
+            Close
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };
+
