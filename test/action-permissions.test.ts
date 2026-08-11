@@ -167,4 +167,70 @@ describe("Action-based Tool Grouping & Permissions", () => {
       expect(updated?.action_type).toBe("delete");
     });
   });
+
+  describe("Permission Retention Across Tool Refreshes", () => {
+    it("preserves permission matrix rules when tools are refreshed", async () => {
+      const db = getDb();
+      const serverId = "srv-refresh-test";
+
+      db.insert(mcpServers)
+        .values({
+          id: serverId,
+          name: "refresh_server",
+          transportType: "stdio",
+          configJson: "{}",
+          status: "connected",
+        })
+        .run();
+
+      db.insert(mcpTools)
+        .values({
+          id: "t-ref-1",
+          serverId,
+          name: "read_data",
+          namespacedName: "refresh_server__read_data",
+          description: "Read data",
+          inputSchemaJson: "{}",
+          actionType: "read",
+        })
+        .run();
+
+      const key = keyService.createKey({
+        name: "Refresh Key",
+        permissions: [
+          { serverId, actionType: "read" },
+          { serverId, toolId: "t-ref-1" },
+        ],
+      });
+
+      // Verify initial permissions
+      let perms = keyService.getPermissions(key.id);
+      expect(perms.length).toBe(2);
+
+      // Re-upsert tools simulating a server reconnect/refresh
+      db.insert(mcpTools)
+        .values({
+          id: "t-ref-1-new-uuid",
+          serverId,
+          name: "read_data",
+          namespacedName: "refresh_server__read_data",
+          description: "Read data updated",
+          inputSchemaJson: "{}",
+          actionType: "read",
+        })
+        .onConflictDoUpdate({
+          target: [mcpTools.serverId, mcpTools.name],
+          set: {
+            namespacedName: "refresh_server__read_data",
+            description: "Read data updated",
+          },
+        })
+        .run();
+
+      // Verify tool ID is preserved and permissions remain intact
+      perms = keyService.getPermissions(key.id);
+      expect(perms.length).toBe(2);
+      expect(perms.find((p) => p.tool_id === "t-ref-1")).toBeDefined();
+    });
+  });
 });

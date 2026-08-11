@@ -1,8 +1,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { eq, and, notInArray, sql } from "drizzle-orm";
+import { eq, ne, and, notInArray, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { mcpServers, mcpTools } from "../../db/schema";
 import { createAuthProvider } from "./auth";
@@ -10,7 +11,6 @@ import { MCPRouterOAuthProvider } from "./oauth-provider";
 import { DockerTransport } from "./docker-transport";
 import { parseDockerCommand } from "./docker-parser";
 import { sidecarManager } from "./sidecar";
-import { hostProcessManager } from "./host";
 import { classifyToolAction } from "./classifier";
 
 export interface ActiveServerConnection {
@@ -54,69 +54,59 @@ export class UpstreamConnectionManager {
       let transport: Transport;
       let stopSidecar: (() => Promise<void>) | undefined;
 
-      if (server.transportType === "stdio" || server.transportType === "docker") {
-        const isDocker = server.transportType === "docker" || server.executorType === "docker";
+      if (server.transportType === "stdio" && !config.useDocker) {
+        console.log(`[UpstreamManager] Spawning native host stdio transport for ${serverId}: ${config.command} ${(config.args || []).join(" ")}`);
+        const envVars = {
+          ...process.env,
+          ...(config.env || {}),
+          ...authHeaders,
+        };
+        transport = new StdioClientTransport({
+          command: config.command,
+          args: config.args || [],
+          env: envVars,
+        });
+      } else if (server.transportType === "docker" || (server.transportType === "stdio" && config.useDocker)) {
+        // Docker sidecar transport
+        let sidecarConfig: {
+          image?: string;
+          command?: string;
+          args?: string[];
+          env?: Record<string, string>;
+          volumes?: string[];
+        };
 
-        if (!isDocker) {
-          // Default: execute directly on host OS using HostProcessManager
-          const hostConfig = {
+        if (server.transportType === "docker" && config.rawCommand) {
+          const parsed = parseDockerCommand(config.rawCommand);
+          sidecarConfig = {
+            image: parsed.image,
+            command: parsed.command,
+            args: parsed.args,
+            env: { ...parsed.env, ...authHeaders },
+            volumes: parsed.volumes,
+            name: parsed.name || parsed.inferredName || server.name,
+          };
+        } else {
+          sidecarConfig = {
+            image: config.image,
             command: config.command,
             args: config.args,
             env: { ...config.env, ...authHeaders },
-            cwd: config.cwd,
+            volumes: config.volumes,
+            name: config.name || server.name,
           };
-
-          console.log(`[UpstreamManager] Spawning host process for ${serverId} (${server.name}), command: ${config.command}`);
-          const hostConn = await hostProcessManager.spawnHostProcess(serverId, hostConfig);
-          stopSidecar = hostConn.stop;
-
-          transport = new DockerTransport({
-            readable: hostConn.readable,
-            writable: hostConn.writable,
-            stop: hostConn.stop,
-          });
-        } else {
-          // Docker Sidecar container execution
-          let sidecarConfig: {
-            image?: string;
-            command?: string;
-            args?: string[];
-            env?: Record<string, string>;
-            volumes?: string[];
-          };
-
-          if (server.transportType === "docker" && config.rawCommand) {
-            const parsed = parseDockerCommand(config.rawCommand);
-            sidecarConfig = {
-              image: parsed.image,
-              command: parsed.command,
-              args: parsed.args,
-              env: { ...parsed.env, ...authHeaders },
-              volumes: parsed.volumes,
-              name: parsed.name || parsed.inferredName || server.name,
-            };
-          } else {
-            sidecarConfig = {
-              image: config.image,
-              command: config.command,
-              args: config.args,
-              env: { ...config.env, ...authHeaders },
-              volumes: config.volumes,
-              name: config.name || server.name,
-            };
-          }
-
-          console.log(`[UpstreamManager] Spawning sidecar for ${serverId} (${server.transportType}), image: ${sidecarConfig.image}`);
-          const sidecar = await sidecarManager.spawnSidecar(serverId, sidecarConfig, server.name);
-          console.log(`[UpstreamManager] Sidecar spawned for ${serverId}, connecting transport...`);
-          stopSidecar = sidecar.stop;
-
-          transport = new DockerTransport({
-            readable: sidecar.readable,
-            writable: sidecar.writable,
-            stop: sidecar.stop,
-          });
         }
+
+        console.log(`[UpstreamManager] Spawning sidecar for ${serverId} (${server.transportType}), image: ${sidecarConfig.image}`);
+        const sidecar = await sidecarManager.spawnSidecar(serverId, sidecarConfig, server.name);
+        console.log(`[UpstreamManager] Sidecar spawned for ${serverId}, connecting transport...`);
+        stopSidecar = sidecar.stop;
+
+        transport = new DockerTransport({
+          readable: sidecar.readable,
+          writable: sidecar.writable,
+          stop: sidecar.stop,
+        });
       } else if (server.transportType === "sse") {
         const url = new URL(config.url);
         transport = new SSEClientTransport(url, {
@@ -176,7 +166,7 @@ export class UpstreamConnectionManager {
           .run();
       }
 
-      // Remove any tools no longer exposed by server
+      // Remove any tools no longer exposed by server (only if tools list returned)
       const currentToolNames = discoveredTools.map((t) => t.name);
       if (currentToolNames.length > 0) {
         db.delete(mcpTools)
@@ -186,10 +176,6 @@ export class UpstreamConnectionManager {
               notInArray(mcpTools.name, currentToolNames)
             )
           )
-          .run();
-      } else {
-        db.delete(mcpTools)
-          .where(eq(mcpTools.serverId, serverId))
           .run();
       }
 
@@ -282,28 +268,10 @@ export class UpstreamConnectionManager {
     }
 
     const activeConn = this.activeConnections.get(serverId)!;
-    try {
-      const result = await activeConn.client.callTool({
-        name: originalToolName,
-        arguments: args,
-      });
-
-      // Check for tool execution errors returned in MCP CallToolResult
-      if (result && typeof result === "object" && (result as any).isError) {
-        console.warn(
-          `[UpstreamManager] Tool '${originalToolName}' on server ${serverId} returned isError: true`,
-          JSON.stringify(result)
-        );
-      }
-
-      return result;
-    } catch (err: any) {
-      console.error(
-        `[UpstreamManager] Tool '${originalToolName}' call failed on server ${serverId}:`,
-        err.message || String(err)
-      );
-      throw err;
-    }
+    return await activeConn.client.callTool({
+      name: originalToolName,
+      arguments: args,
+    });
   }
 
   async reconnectAll(): Promise<void> {
@@ -311,11 +279,15 @@ export class UpstreamConnectionManager {
     const servers = db
       .select({ id: mcpServers.id })
       .from(mcpServers)
-      .where(eq(mcpServers.status, "connected"))
+      .where(ne(mcpServers.status, "need_auth"))
       .all();
 
     for (const server of servers) {
-      await this.connectServer(server.id);
+      try {
+        await this.connectServer(server.id);
+      } catch (err: any) {
+        console.error(`[UpstreamManager] Reconnect failed for ${server.id}:`, err?.message || err);
+      }
     }
   }
 
@@ -332,3 +304,10 @@ export class UpstreamConnectionManager {
 }
 
 export const upstreamManager = new UpstreamConnectionManager();
+
+process.on("SIGINT", async () => {
+  await upstreamManager.disconnectAll();
+});
+process.on("SIGTERM", async () => {
+  await upstreamManager.disconnectAll();
+});
