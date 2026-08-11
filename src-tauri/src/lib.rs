@@ -1,5 +1,4 @@
 use std::sync::atomic::{AtomicU16, Ordering};
-use tauri::Manager;
 
 static ACTIVE_BACKEND_PORT: AtomicU16 = AtomicU16::new(5170);
 
