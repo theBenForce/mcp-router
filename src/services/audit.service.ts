@@ -23,6 +23,7 @@ export class AuditService {
         status: input.status,
         durationMs: input.durationMs || null,
         errorMessage: input.errorMessage || null,
+        createdAt: new Date().toISOString(),
       })
       .run();
     return id;

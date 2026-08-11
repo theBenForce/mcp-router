@@ -3,6 +3,7 @@ import { Activity, CheckCircle, AlertTriangle, ShieldAlert, RefreshCw } from "lu
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { formatLocalDateTime } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -73,8 +74,8 @@ export const AuditPage: React.FC = () => {
             <TableBody className="font-mono">
               {logs.map((log) => (
                 <TableRow key={log.id} className="border-zinc-800/60 hover:bg-zinc-900/40">
-                  <TableCell className="text-zinc-400">
-                    {new Date(log.created_at).toLocaleString()}
+                  <TableCell className="text-zinc-400 text-xs font-mono">
+                    {formatLocalDateTime(log.created_at)}
                   </TableCell>
                   <TableCell className="text-zinc-200">
                     {log.api_key_name || "Unknown"} <span className="text-zinc-500">({log.key_prefix || "none"})</span>
