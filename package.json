@@ -14,6 +14,7 @@
     "db:generate": "bun --bun drizzle-kit generate",
     "db:migrate": "bun --bun drizzle-kit migrate",
     "db:studio": "bun --bun drizzle-kit studio",
+    "dev:all": "bun --watch src/index.ts & bun --cwd src/web run dev",
     "tauri": "tauri",
     "dev:desktop": "tauri dev",
     "build:desktop": "bun run build:web && bun build --compile src/index.ts --outfile src-tauri/bin/backend && tauri build"
