@@ -17,7 +17,8 @@
     "dev:all": "bun --watch src/index.ts & cd src/web && bun run dev",
     "tauri": "tauri",
     "dev:desktop": "tauri dev",
-    "build:desktop": "bun run build:web && bun scripts/build-backend.ts && tauri build"
+    "build:desktop": "bun run build:web && bun scripts/build-backend.ts && tauri build",
+    "sync-version": "bun scripts/sync-version.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.1.0",
