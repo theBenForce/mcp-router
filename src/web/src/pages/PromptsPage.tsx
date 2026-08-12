@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Plus, MessageSquare, Trash2, Code2, CheckCircle2, AlertCircle } from "lucide-react";
 import { AddPromptModal } from "../components/AddPromptModal";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -9,6 +10,7 @@ export const PromptsPage: React.FC = () => {
   const [prompts, setPrompts] = useState<any[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState<any | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [deletingPromptId, setDeletingPromptId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,14 +33,22 @@ export const PromptsPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this prompt?")) return;
+  const handleDelete = (id: string) => {
+    setDeletingPromptId(id);
+  };
+
+  const confirmDeletePrompt = async () => {
+    if (!deletingPromptId) return;
     try {
-      await fetch(`/api/prompts/${id}`, { method: "DELETE" });
-      setSelectedPrompt(null);
+      await fetch(`/api/prompts/${deletingPromptId}`, { method: "DELETE" });
+      if (selectedPrompt?.id === deletingPromptId) {
+        setSelectedPrompt(null);
+      }
       loadPrompts();
     } catch (e) {
       console.error("Delete failed:", e);
+    } finally {
+      setDeletingPromptId(null);
     }
   };
 
@@ -194,6 +204,15 @@ export const PromptsPage: React.FC = () => {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSuccess={loadPrompts}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(deletingPromptId)}
+        title="Delete Prompt"
+        description="Are you sure you want to delete this prompt template?"
+        confirmText="Delete Prompt"
+        onClose={() => setDeletingPromptId(null)}
+        onConfirm={confirmDeletePrompt}
       />
     </div>
   );

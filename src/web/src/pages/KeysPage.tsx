@@ -3,6 +3,7 @@ import { Plus, ShieldCheck, Trash2, CheckCircle, Ban, Code } from "lucide-react"
 import { CreateKeyModal } from "../components/CreateKeyModal";
 import { PermissionMatrixModal } from "../components/PermissionMatrixModal";
 import { KeyConfigModal } from "../components/KeyConfigModal";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -21,6 +22,7 @@ export const KeysPage: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [matrixKey, setMatrixKey] = useState<{ id: string; name: string } | null>(null);
   const [configKey, setConfigKey] = useState<{ id: string; name: string } | null>(null);
+  const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,13 +42,19 @@ export const KeysPage: React.FC = () => {
     }
   };
 
-  const handleRevoke = async (id: string) => {
-    if (!confirm("Are you sure you want to revoke this API key?")) return;
+  const handleRevoke = (id: string) => {
+    setRevokingKeyId(id);
+  };
+
+  const confirmRevokeKey = async () => {
+    if (!revokingKeyId) return;
     try {
-      await fetch(`/api/keys/${id}`, { method: "DELETE" });
+      await fetch(`/api/keys/${revokingKeyId}`, { method: "DELETE" });
       loadKeys();
     } catch (e) {
       console.error("Failed to revoke key:", e);
+    } finally {
+      setRevokingKeyId(null);
     }
   };
 
@@ -171,6 +179,15 @@ export const KeysPage: React.FC = () => {
         keyId={configKey?.id || null}
         keyName={configKey?.name || ""}
         onClose={() => setConfigKey(null)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(revokingKeyId)}
+        title="Revoke API Key"
+        description="Are you sure you want to revoke this API key? Applications using this key will immediately lose access."
+        confirmText="Revoke Key"
+        onClose={() => setRevokingKeyId(null)}
+        onConfirm={confirmRevokeKey}
       />
     </div>
   );
