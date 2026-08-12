@@ -60,11 +60,14 @@ jobs:
           cd src/web && bun install
 
       - name: Import Apple Signing Certificate (if configured)
-        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "No APPLE_CERTIFICATE secret set, skipping certificate import."
+            exit 0
+          fi
           KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
           echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $RUNNER_TEMP/certificate.p12
           security create-keychain -p "buildkeychain" $KEYCHAIN_PATH
