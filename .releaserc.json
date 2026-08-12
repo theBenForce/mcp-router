@@ -11,16 +11,6 @@
         "npmPublish": false
       }
     ],
-    [
-      "@semantic-release/github",
-      {
-        "assets": [
-          {
-            "path": "src-tauri/target/**/bundle/dmg/*.dmg",
-            "label": "MCP-Router-macOS-AppleSilicon.dmg"
-          }
-        ]
-      }
-    ]
+    "@semantic-release/github"
   ]
 }

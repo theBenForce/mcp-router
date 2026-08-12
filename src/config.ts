@@ -26,22 +26,6 @@ export function getDataDir(): string {
     return testDir;
   }
 
-  const isDev = process.env.NODE_ENV !== "production";
-  if (isDev) {
-    const localDataDir = path.join(process.cwd(), "data");
-    try {
-      if (!fs.existsSync(localDataDir)) {
-        fs.mkdirSync(localDataDir, { recursive: true });
-      }
-      const testFile = path.join(localDataDir, ".writable_test");
-      fs.writeFileSync(testFile, "ok");
-      fs.unlinkSync(testFile);
-      return localDataDir;
-    } catch {
-      // Fallback to user app data directory if local cwd is read-only
-    }
-  }
-
   const home = os.homedir();
   let userDir: string;
   if (process.platform === "darwin") {

@@ -3,6 +3,7 @@ import { Plus, Server, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle, T
 import { AddServerModal } from "../components/AddServerModal";
 import { ServerModal } from "../components/ServerModal";
 import { AuthModal } from "../components/AuthModal";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "../components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,7 @@ export const ServersPage: React.FC = () => {
   const [editingServer, setEditingServer] = useState<any | null>(null);
   const [authModalServer, setAuthModalServer] = useState<any | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [deletingServerId, setDeletingServerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -70,14 +72,22 @@ export const ServersPage: React.FC = () => {
     window.location.href = `/api/oauth/authorize?serverId=${id}`;
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this server configuration?")) return;
+  const handleDelete = (id: string) => {
+    setDeletingServerId(id);
+  };
+
+  const confirmDeleteServer = async () => {
+    if (!deletingServerId) return;
     try {
-      await fetch(`/api/servers/${id}`, { method: "DELETE" });
-      setSelectedServer(null);
+      await fetch(`/api/servers/${deletingServerId}`, { method: "DELETE" });
+      if (selectedServer?.id === deletingServerId) {
+        setSelectedServer(null);
+      }
       loadServers();
     } catch (e) {
       console.error("Delete failed:", e);
+    } finally {
+      setDeletingServerId(null);
     }
   };
 
@@ -521,6 +531,16 @@ export const ServersPage: React.FC = () => {
             loadServerDetails(authModalServer.id);
           }
         }}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(deletingServerId)}
+        title="Delete MCP Server"
+        description="Are you sure you want to delete this server configuration? This will also disconnect active sidecars."
+        confirmText="Delete Server"
+        onClose={() => setDeletingServerId(null)}
+        onConfirm={confirmDeleteServer}
       />
     </div>
   );

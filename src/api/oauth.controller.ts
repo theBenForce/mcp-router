@@ -13,6 +13,17 @@ import { serverService } from "../services/server.service";
 
 const app = new Hono();
 
+function createTimeoutFetch(timeoutMs = 10000) {
+  return (url: any, init?: any) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    if (init?.signal) {
+      init.signal.addEventListener("abort", () => controller.abort());
+    }
+    return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  };
+}
+
 /**
  * GET /api/oauth/discover?url=xxx
  * Discovers OAuth 2.1 authorization server metadata (RFC 8414/9728)
@@ -25,10 +36,10 @@ app.get("/discover", async (c) => {
   }
 
   try {
-    const serverInfo = await discoverOAuthServerInfo(urlParam);
+    const serverInfo = await discoverOAuthServerInfo(urlParam, { fetchFn: createTimeoutFetch(10000) });
     const scopesSupported =
       serverInfo.resourceMetadata?.scopes_supported ||
-      serverInfo.authorizationServerMetadata.scopes_supported ||
+      serverInfo.authorizationServerMetadata?.scopes_supported ||
       [];
     console.log(`[OAuthController] Discovered OAuth server info for ${urlParam}:`, {
       authServerUrl: serverInfo.authorizationServerUrl,
@@ -71,14 +82,24 @@ app.get("/authorize", async (c) => {
     }
 
     const oauthProvider = new MCPRouterOAuthProvider({ serverId });
-    const serverInfo = await discoverOAuthServerInfo(serverUrl);
+    const serverInfo = await discoverOAuthServerInfo(serverUrl, { fetchFn: createTimeoutFetch(10000) });
 
     let clientInfo = await oauthProvider.clientInformation();
     if (!clientInfo) {
+      if (!serverInfo.authorizationServerMetadata?.registration_endpoint) {
+        return c.json(
+          {
+            error:
+              "This OAuth server does not support Dynamic Client Registration (RFC 7591). Please provide a Client ID in the server's authentication configuration.",
+          },
+          400
+        );
+      }
       // Perform Dynamic Client Registration (RFC 7591)
       const registered = await registerClient(serverInfo.authorizationServerUrl, {
         metadata: serverInfo.authorizationServerMetadata,
         clientMetadata: oauthProvider.clientMetadata,
+        fetchFn: createTimeoutFetch(10000),
       });
       clientInfo = {
         client_id: registered.client_id,
@@ -92,7 +113,7 @@ app.get("/authorize", async (c) => {
     
     const scopesSupported =
       serverInfo.resourceMetadata?.scopes_supported ||
-      serverInfo.authorizationServerMetadata.scopes_supported;
+      serverInfo.authorizationServerMetadata?.scopes_supported;
 
     // Use explicit config/auth scopes, or fall back to discovered supported scopes
     const requestedScope =
@@ -169,7 +190,7 @@ app.get("/callback", async (c) => {
     const config = JSON.parse(server.config_json || "{}");
     const serverUrl = config.url;
     const oauthProvider = new MCPRouterOAuthProvider({ serverId });
-    const serverInfo = await discoverOAuthServerInfo(serverUrl);
+    const serverInfo = await discoverOAuthServerInfo(serverUrl, { fetchFn: createTimeoutFetch(10000) });
     const clientInfo = await oauthProvider.clientInformation();
 
     if (!clientInfo) {

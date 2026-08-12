@@ -1,6 +1,6 @@
 [package]
 name = "mcp-router"
-version = "1.0.0"
+version = "1.0.1"
 description = "Local MCP Router & Proxy Gateway Desktop App"
 authors = ["Antigravity Team"]
 edition = "2021"
