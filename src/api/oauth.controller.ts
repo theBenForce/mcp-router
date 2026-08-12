@@ -73,12 +73,34 @@ app.get("/authorize", async (c) => {
     return c.json({ error: `Server with ID ${serverId} not found` }, 404);
   }
 
+  const host = c.req.header("host") || "";
+  const referer = c.req.header("referer") || "";
+  const acceptHeader = c.req.header("accept") || "";
+  const secFetchMode = c.req.header("sec-fetch-mode") || "";
+  const isBrowserNavigation = secFetchMode === "navigate" || acceptHeader.includes("text/html");
+
+  const getServersRedirect = (errorMsg: string) => {
+    const query = `oauth_error=${encodeURIComponent(errorMsg)}`;
+    if (host.includes("5170") || referer.includes("5173")) {
+      const hostname = host.split(":")[0] || "localhost";
+      return `http://${hostname}:5173/servers?${query}`;
+    }
+    return `/servers?${query}`;
+  };
+
+  const sendError = (errorMsg: string, status: 400 | 500 = 400) => {
+    if (isBrowserNavigation) {
+      return c.redirect(getServersRedirect(errorMsg));
+    }
+    return c.json({ error: errorMsg }, status);
+  };
+
   try {
     const configJsonStr = (server as any).configJson || (server as any).config_json || "{}";
     const config = typeof configJsonStr === "string" ? JSON.parse(configJsonStr) : configJsonStr;
     const serverUrl = config.url;
     if (!serverUrl) {
-      return c.json({ error: "Server config must contain a valid url for OAuth" }, 400);
+      return sendError(`Server '${server.name}' does not have a remote HTTP URL configured for OAuth.`, 400);
     }
 
     const oauthProvider = new MCPRouterOAuthProvider({ serverId });
@@ -87,11 +109,8 @@ app.get("/authorize", async (c) => {
     let clientInfo = await oauthProvider.clientInformation();
     if (!clientInfo) {
       if (!serverInfo.authorizationServerMetadata?.registration_endpoint) {
-        return c.json(
-          {
-            error:
-              "This OAuth server does not support Dynamic Client Registration (RFC 7591). Please provide a Client ID in the server's authentication configuration.",
-          },
+        return sendError(
+          "This OAuth server does not support Dynamic Client Registration (RFC 7591). Please provide a Client ID in the server's authentication configuration.",
           400
         );
       }
@@ -144,7 +163,7 @@ app.get("/authorize", async (c) => {
     return c.redirect(authorizationUrl.toString());
   } catch (err: any) {
     console.error(`[OAuthController] Authorization error for server ${serverId}:`, err);
-    return c.json({ error: err.message || String(err) }, 500);
+    return sendError(err.message || String(err), 500);
   }
 });
 
@@ -219,11 +238,11 @@ app.get("/callback", async (c) => {
     // If request comes from Vite dev server or host header, redirect appropriately.
     const host = c.req.header("host") || "";
     const referer = c.req.header("referer") || "";
-    let redirectTarget = "/#/servers?oauth_success=true";
+    let redirectTarget = "/servers?oauth_success=true";
     if (host.includes("5170") || referer.includes("5173")) {
       // Dev mode: frontend is on 5173
       const hostname = host.split(":")[0] || "localhost";
-      redirectTarget = `http://${hostname}:5173/#/servers?oauth_success=true`;
+      redirectTarget = `http://${hostname}:5173/servers?oauth_success=true`;
     }
     return c.redirect(redirectTarget);
   } catch (err: any) {

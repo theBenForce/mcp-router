@@ -383,10 +383,25 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       }
 
       if (transportType === "stdio") {
-        const args = argsStr
+        let cmd = command.trim();
+        let args = argsStr
           .trim()
-          .split(" ")
+          .split(/\s+/)
           .filter((a) => a.length > 0);
+
+        if (cmd.includes(" ")) {
+          const parts = cmd.split(/\s+/).filter(Boolean);
+          cmd = parts[0];
+          args = [...parts.slice(1), ...args];
+        }
+
+        if (/\.(js|mjs|cjs)$/i.test(cmd)) {
+          args = [cmd, ...args];
+          cmd = "node";
+        } else if (/\.ts$/i.test(cmd)) {
+          args = [cmd, ...args];
+          cmd = "bun";
+        }
 
         const envObj: Record<string, string> = {};
         for (const ev of envVars) {
@@ -396,7 +411,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         }
 
         config = {
-          command: command.trim(),
+          command: cmd,
           args,
           ...(cwd.trim() ? { cwd: cwd.trim() } : {}),
           ...(image.trim() ? { image: image.trim() } : {}),
