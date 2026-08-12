@@ -19,6 +19,24 @@ export interface ActiveServerConnection {
   stopSidecar?: () => Promise<void>;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, ms);
+
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 export class UpstreamConnectionManager {
   private activeConnections: Map<string, ActiveServerConnection> = new Map();
 
@@ -132,7 +150,11 @@ export class UpstreamConnectionManager {
         { capabilities: {} }
       );
 
-      await client.connect(transport);
+      await withTimeout(
+        client.connect(transport),
+        8000,
+        `Connection to server '${server.name}' timed out after 8s`
+      );
 
       // Discover and sync tools
       const toolsResult = await client.listTools();
@@ -282,13 +304,13 @@ export class UpstreamConnectionManager {
       .where(ne(mcpServers.status, "need_auth"))
       .all();
 
-    for (const server of servers) {
-      try {
-        await this.connectServer(server.id);
-      } catch (err: any) {
-        console.error(`[UpstreamManager] Reconnect failed for ${server.id}:`, err?.message || err);
-      }
-    }
+    await Promise.allSettled(
+      servers.map((server) =>
+        this.connectServer(server.id).catch((err: any) => {
+          console.error(`[UpstreamManager] Reconnect failed for ${server.id}:`, err?.message || err);
+        })
+      )
+    );
   }
 
   async disconnectAll(): Promise<void> {
