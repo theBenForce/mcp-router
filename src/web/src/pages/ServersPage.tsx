@@ -33,6 +33,7 @@ export const ServersPage: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "connected" | "need_auth" | "error">("all");
+  const [loading, setLoading] = useState(false);
 
   const handleStatusChange = useCallback((event: ServerStatusEventPayload) => {
     setServers((prevServers) =>
@@ -613,12 +614,6 @@ export const ServersPage: React.FC = () => {
                                   <span className="text-cyan-400">{h}</span>
                                   <span className="text-zinc-500"> ➔ </span>
                                   <span className="text-zinc-400">{c || h}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
                                 </div>
                               );
                             })}
