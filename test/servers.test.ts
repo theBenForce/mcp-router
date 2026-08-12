@@ -14,6 +14,32 @@ describe("Servers & Tools API", () => {
     expect(Array.isArray(servers)).toBe(true);
   });
 
+  test("GET /api/servers returns servers sorted alphabetically by name", async () => {
+    const rawDb = getRawDb();
+    const idZ = crypto.randomUUID();
+    const idA = crypto.randomUUID();
+    const idM = crypto.randomUUID();
+
+    rawDb.query(`
+      INSERT INTO mcp_servers (id, name, transport_type, config_json, status)
+      VALUES (?, 'z-server-test', 'sse', '{}', 'disconnected'),
+             (?, 'a-server-test', 'sse', '{}', 'disconnected'),
+             (?, 'm-server-test', 'sse', '{}', 'disconnected')
+    `).run(idZ, idA, idM);
+
+    const res = await app.fetch(new Request("http://localhost/api/servers"));
+    expect(res.status).toBe(200);
+    const servers = await res.json();
+    const testServers = servers.filter((s: any) =>
+      ["z-server-test", "a-server-test", "m-server-test"].includes(s.name)
+    );
+    expect(testServers.map((s: any) => s.name)).toEqual([
+      "a-server-test",
+      "m-server-test",
+      "z-server-test",
+    ]);
+  });
+
   test("POST /api/servers creates a new server record", async () => {
     const serverName = `test-server-${crypto.randomUUID().slice(0, 8)}`;
     const payload = {

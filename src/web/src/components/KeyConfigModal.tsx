@@ -37,13 +37,12 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
   const loadData = async () => {
     setLoading(true);
     try {
-  const loadData = async () => {
-    setLoading(true);
-    try {
       const res = await fetch(`/api/keys/${keyId}/allowed-servers`);
       if (res.ok) {
         const data = await res.json();
-        const allowedServers = data.servers || [];
+        const allowedServers = (data.servers || []).sort((a: any, b: any) =>
+          (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+        );
         setServers(allowedServers);
         setSelectedServers(allowedServers.map((s: any) => s.id));
         setIncludePrompts(Boolean(data.hasPromptsAccess));
@@ -92,7 +91,9 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
         }
       }
 
-      const activeList = servers.filter((s) => selectedServers.includes(s.id));
+      const activeList = servers
+        .filter((s) => selectedServers.includes(s.id))
+        .sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" }));
       for (const s of activeList) {
         const keyNameSlug = s.name.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
         const sseUrl = `${origin}/mcp/servers/${s.id}/sse?key=${tokenPlaceholder}`;

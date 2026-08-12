@@ -24,7 +24,7 @@ if (!fs.existsSync(binDir)) {
 const outfile = path.join(binDir, `backend-${triple}`);
 console.log(`[Build] Compiling backend sidecar binary for target ${triple} -> ${outfile}`);
 
-const res = spawnSync("bun", ["build", "--compile", "src/index.ts", "--outfile", outfile], {
+const res = spawnSync("bun", ["build", "--compile", "--external", "cpu-features", "src/index.ts", "--outfile", outfile], {
   stdio: "inherit",
   env: process.env,
 });

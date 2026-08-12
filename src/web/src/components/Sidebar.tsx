@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Server, Key, Activity, Cpu, ShieldCheck, MessageSquare, Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { SettingsModal } from "./SettingsModal";
 
 interface SidebarProps {
@@ -28,53 +29,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      <aside className="w-64 border-r border-zinc-800 bg-zinc-950/80 p-4 flex flex-col justify-between min-h-screen">
-        <div>
-          {/* App Logo */}
-          <div className="flex items-center gap-3 px-3 py-4 mb-6 border-b border-zinc-800/80">
-            <img src="/app-icon.svg" alt="MCP Router Icon" className="h-9 w-9 rounded-xl shadow-lg shadow-indigo-500/20 object-contain" />
-            <div>
-              <h1 className="font-bold text-base tracking-tight text-zinc-100">MCP Router</h1>
-              <p className="text-xs text-zinc-400 font-mono">Local Proxy Gateway</p>
+      <aside className="w-64 border-r border-zinc-800 bg-zinc-950/80 p-4 flex flex-col justify-between h-full shrink-0 overflow-hidden">
+        <ScrollArea className="flex-1 -mx-4 px-4 min-h-0">
+          <div>
+            {/* App Logo */}
+            <div className="flex items-center gap-3 px-3 py-4 mb-6 border-b border-zinc-800/80">
+              <img src="/app-icon.svg" alt="MCP Router Icon" className="h-9 w-9 rounded-xl shadow-lg shadow-indigo-500/20 object-contain" />
+              <div>
+                <h1 className="font-bold text-base tracking-tight text-zinc-100">MCP Router</h1>
+                <p className="text-xs text-zinc-400 font-mono">Local Proxy Gateway</p>
+              </div>
             </div>
+
+            {/* Navigation */}
+            <nav className="space-y-1.5">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive =
+                  item.path === "/"
+                    ? location.pathname === "/"
+                    : location.pathname.startsWith(item.path);
+
+                return (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                      isActive
+                        ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-sm hover:bg-indigo-600/20 hover:text-indigo-300"
+                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className={`h-4 w-4 ${isActive ? "text-indigo-400" : "text-zinc-400"}`} />
+                      <span>{item.label}</span>
+                    </div>
+                    {item.badge !== null && item.badge > 0 && (
+                      <Badge variant="secondary" className="font-mono text-xs font-normal">
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </NavLink>
+                );
+              })}
+            </nav>
           </div>
-
-          {/* Navigation */}
-          <nav className="space-y-1.5">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                item.path === "/"
-                  ? location.pathname === "/"
-                  : location.pathname.startsWith(item.path);
-
-              return (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150 ${
-                    isActive
-                      ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-sm hover:bg-indigo-600/20 hover:text-indigo-300"
-                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className={`h-4 w-4 ${isActive ? "text-indigo-400" : "text-zinc-400"}`} />
-                    <span>{item.label}</span>
-                  </div>
-                  {item.badge !== null && item.badge > 0 && (
-                    <Badge variant="secondary" className="font-mono text-xs font-normal">
-                      {item.badge}
-                    </Badge>
-                  )}
-                </NavLink>
-              );
-            })}
-          </nav>
-        </div>
+        </ScrollArea>
 
         {/* System Footer & Settings */}
-        <div className="space-y-2">
+        <div className="pt-4 border-t border-zinc-800/60 space-y-2 shrink-0">
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/60 border border-zinc-800/60 transition-all duration-150"

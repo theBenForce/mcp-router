@@ -12,6 +12,7 @@ import keysController from "./api/keys.controller";
 import auditController from "./api/audit.controller";
 import promptsController from "./api/prompts.controller";
 import oauthController from "./api/oauth.controller";
+import configController from "./api/config.controller";
 import downstreamHandler from "./mcp/downstream/handler";
 import { upstreamManager } from "./mcp/upstream/manager";
 
@@ -36,6 +37,7 @@ app.route("/api/keys", keysController);
 app.route("/api/audit", auditController);
 app.route("/api/prompts", promptsController);
 app.route("/api/oauth", oauthController);
+app.route("/api/config", configController);
 
 // Downstream MCP Proxy Transports (SSE & Streamable HTTP)
 app.route("/", downstreamHandler);
@@ -101,5 +103,9 @@ if (import.meta.main) {
   startServer(config.port);
 }
 
-export default app;
+export { app };
+export default import.meta.main ? undefined : app;
+
+
+
 

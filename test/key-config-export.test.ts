@@ -64,4 +64,37 @@ describe("Export Config Allowed Servers Endpoint", () => {
     expect(dataEmpty.servers).toHaveLength(0);
     expect(dataEmpty.hasPromptsAccess).toBe(false);
   });
+
+  test("GET /api/keys/:id/allowed-servers returns servers sorted alphabetically", async () => {
+    const rawDb = getRawDb();
+    const app = new Hono();
+    app.route("/api/keys", keysController);
+
+    const srvZ = crypto.randomUUID();
+    const srvA = crypto.randomUUID();
+
+    rawDb.query(`
+      INSERT INTO mcp_servers (id, name, transport_type, config_json, status)
+      VALUES (?, 'zebra-server', 'sse', '{}', 'connected'),
+             (?, 'alpha-server', 'sse', '{}', 'connected')
+    `).run(srvZ, srvA);
+
+    rawDb.query(`
+      INSERT INTO mcp_tools (id, server_id, name, namespaced_name, input_schema_json)
+      VALUES (?, ?, 'tool_z', 'zebra_tool_z', '{}'),
+             (?, ?, 'tool_a', 'alpha_tool_a', '{}')
+    `).run(crypto.randomUUID(), srvZ, crypto.randomUUID(), srvA);
+
+    const keyFull = keyService.createKey({ name: "Full Access Key" });
+    keyService.setPermissions(keyFull.id, {
+      permissions: [{ serverId: srvZ }, { serverId: srvA }],
+    });
+
+    const res = await app.request(`/api/keys/${keyFull.id}/allowed-servers`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    const serverNames = data.servers.map((s: any) => s.name);
+    const targetNames = serverNames.filter((n: string) => n === "zebra-server" || n === "alpha-server");
+    expect(targetNames).toEqual(["alpha-server", "zebra-server"]);
+  });
 });

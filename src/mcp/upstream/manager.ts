@@ -13,6 +13,8 @@ import { parseDockerCommand } from "./docker-parser";
 import { sidecarManager } from "./sidecar";
 import { hostProcessManager } from "./host";
 import { classifyToolAction } from "./classifier";
+import { serverLogStore } from "./logger";
+import { serverEvents } from "./events";
 
 export interface ActiveServerConnection {
   client: Client;
@@ -85,6 +87,8 @@ export class UpstreamConnectionManager {
       .where(eq(mcpServers.id, serverId))
       .run();
 
+    serverEvents.emitStatus({ serverId, status: "connecting" });
+    serverLogStore.addLog(serverId, "info", `[UpstreamManager] Connecting to server '${server.name}' (${server.transportType})...`);
     let getStderrLog: (() => string) | undefined;
 
     try {
@@ -118,6 +122,14 @@ export class UpstreamConnectionManager {
           writable: hostConn.writable,
           stop: hostConn.stop,
         });
+        if ((transport as any).stderr) {
+          (transport as any).stderr.on("data", (chunk: Buffer) => {
+            const str = chunk.toString().trim();
+            if (str) {
+              serverLogStore.addLog(serverId, "stderr", str);
+            }
+          });
+        }
       } else if (server.transportType === "docker" || (server.transportType === "stdio" && config.useDocker)) {
         // Docker sidecar transport
         let sidecarConfig: {
@@ -268,6 +280,14 @@ export class UpstreamConnectionManager {
         .where(eq(mcpServers.id, serverId))
         .run();
 
+      serverEvents.emitStatus({ serverId, status: "connected", lastError: null });
+
+      serverLogStore.addLog(
+        serverId,
+        "info",
+        `[UpstreamManager] Connected successfully to '${server.name}'. Discovered ${discoveredTools.length} tool(s).`
+      );
+
       return true;
     } catch (error: any) {
       let errorMessage = error?.message || String(error);
@@ -281,15 +301,23 @@ export class UpstreamConnectionManager {
       }
 
       console.error(`[UpstreamManager] Connection failed for server ${serverId}:`, errorMessage);
+      serverLogStore.addLog(
+        serverId,
+        "error",
+        `[UpstreamManager] Connection failed: ${errorMessage}`
+      );
 
+      const status = isOAuthAuthRequired ? "need_auth" : "error";
       db.update(mcpServers)
         .set({
-          status: isOAuthAuthRequired ? "need_auth" : "error",
+          status,
           lastError: errorMessage,
           updatedAt: sql`datetime('now')`,
         })
         .where(eq(mcpServers.id, serverId))
         .run();
+
+      serverEvents.emitStatus({ serverId, status, lastError: errorMessage });
 
       return false;
     }
@@ -309,11 +337,15 @@ export class UpstreamConnectionManager {
       this.activeConnections.delete(serverId);
     }
 
+    serverLogStore.addLog(serverId, "info", `[UpstreamManager] Disconnected server '${serverId}'.`);
+
     const db = getDb();
     db.update(mcpServers)
       .set({ status: "disconnected", updatedAt: sql`datetime('now')` })
       .where(eq(mcpServers.id, serverId))
       .run();
+
+    serverEvents.emitStatus({ serverId, status: "disconnected", lastError: null });
   }
 
   async callTool(
@@ -330,11 +362,20 @@ export class UpstreamConnectionManager {
       }
     }
 
-    const activeConn = this.activeConnections.get(serverId)!;
-    return await activeConn.client.callTool({
-      name: originalToolName,
-      arguments: args,
-    });
+    serverLogStore.addLog(serverId, "info", `[Tool Call] Executing tool '${originalToolName}'`);
+
+    try {
+      const activeConn = this.activeConnections.get(serverId)!;
+      const res = await activeConn.client.callTool({
+        name: originalToolName,
+        arguments: args,
+      });
+      serverLogStore.addLog(serverId, "info", `[Tool Call] Tool '${originalToolName}' executed successfully`);
+      return res;
+    } catch (err: any) {
+      serverLogStore.addLog(serverId, "error", `[Tool Call] Tool '${originalToolName}' failed: ${err?.message || err}`);
+      throw err;
+    }
   }
 
   async reconnectAll(): Promise<void> {
