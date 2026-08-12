@@ -14,6 +14,7 @@ export interface HostProcessConnection {
   process: ChildProcess;
   readable: Readable;
   writable: Writable;
+  getStderr: () => string;
   stop: () => Promise<void>;
 }
 
@@ -69,6 +70,7 @@ export class HostProcessManager {
 
     return new Promise((resolve, reject) => {
       let isSettled = false;
+      const stderrBuffer: string[] = [];
 
       // Spawn as process group leader (detached: true on Unix/macOS) for tree-killing
       const proc = spawn(command, args, {
@@ -106,7 +108,12 @@ export class HostProcessManager {
 
       if (proc.stderr) {
         proc.stderr.on("data", (chunk: Buffer) => {
-          console.error(`[HostProcess ${serverId.substring(0, 8)} stderr]:`, chunk.toString().trim());
+          const text = chunk.toString().trim();
+          if (text) {
+            console.error(`[HostProcess ${serverId.substring(0, 8)} stderr]:`, text);
+            stderrBuffer.push(text);
+            if (stderrBuffer.length > 50) stderrBuffer.shift();
+          }
         });
       }
 
@@ -152,6 +159,7 @@ export class HostProcessManager {
           process: proc,
           readable: proc.stdout,
           writable: proc.stdin,
+          getStderr: () => stderrBuffer.join("\n"),
           stop,
         });
       }

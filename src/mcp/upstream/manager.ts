@@ -11,6 +11,7 @@ import { MCPRouterOAuthProvider } from "./oauth-provider";
 import { DockerTransport } from "./docker-transport";
 import { parseDockerCommand } from "./docker-parser";
 import { sidecarManager } from "./sidecar";
+import { hostProcessManager } from "./host";
 import { classifyToolAction } from "./classifier";
 
 export interface ActiveServerConnection {
@@ -84,6 +85,8 @@ export class UpstreamConnectionManager {
       .where(eq(mcpServers.id, serverId))
       .run();
 
+    let getStderrLog: (() => string) | undefined;
+
     try {
       const config = JSON.parse(server.configJson);
       const authProvider = createAuthProvider(server.authType, server.authDataJson, serverId);
@@ -101,10 +104,19 @@ export class UpstreamConnectionManager {
           ...(config.env || {}),
           ...authHeaders,
         };
-        transport = new StdioClientTransport({
+        const hostConn = await hostProcessManager.spawnHostProcess(serverId, {
           command: normalized.command,
           args: normalized.args,
           env: envVars,
+          cwd: config.cwd,
+        });
+        stopSidecar = hostConn.stop;
+        getStderrLog = hostConn.getStderr;
+
+        transport = new DockerTransport({
+          readable: hostConn.readable,
+          writable: hostConn.writable,
+          stop: hostConn.stop,
         });
       } else if (server.transportType === "docker" || (server.transportType === "stdio" && config.useDocker)) {
         // Docker sidecar transport
@@ -258,8 +270,15 @@ export class UpstreamConnectionManager {
 
       return true;
     } catch (error: any) {
-      const errorMessage = error?.message || String(error);
+      let errorMessage = error?.message || String(error);
       const isOAuthAuthRequired = errorMessage.includes("OAuth authorization required");
+
+      if (getStderrLog) {
+        const stderrLog = getStderrLog();
+        if (stderrLog && stderrLog.trim()) {
+          errorMessage += `\n\nStderr log output:\n${stderrLog.trim()}`;
+        }
+      }
 
       console.error(`[UpstreamManager] Connection failed for server ${serverId}:`, errorMessage);
 

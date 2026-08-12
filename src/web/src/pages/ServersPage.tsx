@@ -410,8 +410,11 @@ export const ServersPage: React.FC = () => {
               )}
 
               {selectedServer.last_error && (
-                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">
-                  Error: {selectedServer.last_error}
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono space-y-1">
+                  <span className="font-semibold text-rose-300 uppercase tracking-wider text-[10px] block">Server Log & Connection Error</span>
+                  <pre className="whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto pr-1 text-rose-300">
+                    {selectedServer.last_error}
+                  </pre>
                 </div>
               )}
 

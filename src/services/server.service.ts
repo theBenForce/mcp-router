@@ -24,7 +24,7 @@ export interface UpdateServerInput {
 export class ServerService {
   listServers() {
     const db = getDb();
-    return db
+    const rows = db
       .select({
         id: mcpServers.id,
         name: mcpServers.name,
@@ -49,6 +49,20 @@ export class ServerService {
       .groupBy(mcpServers.id)
       .orderBy(sql`${mcpServers.createdAt} DESC`)
       .all();
+
+    return rows.map((s) => {
+      let config: Record<string, any> = {};
+      try {
+        config = JSON.parse(s.config_json || "{}");
+      } catch {}
+      const executorType = s.transport_type === "docker" || (s.transport_type === "stdio" && config.useDocker) ? "docker" : "host";
+      return {
+        ...s,
+        config,
+        executor_type: executorType,
+        executorType,
+      };
+    });
   }
 
   getServer(id: string) {
@@ -68,12 +82,17 @@ export class ServerService {
       .orderBy(mcpTools.name)
       .all();
 
+    const config = JSON.parse(server.configJson || "{}");
+    const executorType = server.transportType === "docker" || (server.transportType === "stdio" && config.useDocker) ? "docker" : "host";
+
     return {
       ...server,
       // Expose parsed config and auth_data alongside the raw columns
       // for backward compat with API consumers expecting these shapes
-      config: JSON.parse(server.configJson || "{}"),
+      config,
       auth_data: JSON.parse(server.authDataJson || "{}"),
+      executor_type: executorType,
+      executorType,
       // Map Drizzle camelCase columns to snake_case for API consumers
       server_version: server.serverVersion,
       server_title: server.serverTitle,
@@ -101,7 +120,11 @@ export class ServerService {
   async createServer(input: CreateServerInput) {
     const db = getDb();
     const id = crypto.randomUUID();
-    const configJson = JSON.stringify(input.config);
+    const config = {
+      ...input.config,
+      ...(input.transportType === "stdio" ? { useDocker: input.executorType === "docker" } : {}),
+    };
+    const configJson = JSON.stringify(config);
     const authDataJson = JSON.stringify(input.authData || {});
     const authType = input.authType || "none";
 
@@ -135,7 +158,14 @@ export class ServerService {
     const name = input.name ?? existing.name;
     const description = input.description ?? existing.description;
     const transportType = input.transportType ?? existing.transport_type;
-    const configJson = input.config ? JSON.stringify(input.config) : existing.config_json;
+    const updatedConfig = input.config ? {
+      ...input.config,
+      ...(transportType === "stdio" ? { useDocker: input.executorType === "docker" } : {}),
+    } : {
+      ...existing.config,
+      ...(transportType === "stdio" && input.executorType ? { useDocker: input.executorType === "docker" } : {}),
+    };
+    const configJson = JSON.stringify(updatedConfig);
     const authType = input.authType ?? existing.auth_type;
     const authDataJson = input.authData ? JSON.stringify(input.authData) : existing.auth_data_json;
 
