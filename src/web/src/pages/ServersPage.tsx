@@ -25,18 +25,34 @@ export const ServersPage: React.FC = () => {
   const [authModalServer, setAuthModalServer] = useState<any | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [deletingServerId, setDeletingServerId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [oauthError, setOauthError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get("oauth_error");
     if (err) {
-      setOauthError(err);
+      setAuthError(err);
       // Clean up query param from address bar without reloading
       window.history.replaceState({}, "", window.location.pathname);
     }
     loadServers();
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "MCP_OAUTH_COMPLETE") {
+        loadServers();
+        if (event.data.serverId) {
+          loadServerDetails(event.data.serverId);
+        }
+        if (event.data.error) {
+          setAuthError(event.data.error);
+        } else {
+          setAuthError(null);
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   const loadServers = async () => {
@@ -77,8 +93,69 @@ export const ServersPage: React.FC = () => {
     }
   };
 
-  const handleOAuthAuthorize = (id: string) => {
-    window.location.href = `/api/oauth/authorize?serverId=${id}`;
+  const handleOAuthAuthorize = async (id: string) => {
+    setAuthError(null);
+    const authPath = `/api/oauth/authorize?serverId=${id}`;
+    const fullUrl = new URL(authPath, window.location.origin).href;
+
+    const isTauri = Boolean(
+      (window as any).__TAURI__ ||
+      (window as any).__TAURI_INTERNALS__
+    );
+
+    if (isTauri) {
+      try {
+        const tauri = (window as any).__TAURI__;
+        if (tauri?.shell?.open) {
+          await tauri.shell.open(fullUrl);
+        } else if (tauri?.core?.invoke) {
+          await tauri.core.invoke("plugin:shell|open", { path: fullUrl });
+        } else if ((window as any).__TAURI_INTERNALS__?.invoke) {
+          await (window as any).__TAURI_INTERNALS__.invoke("plugin:shell|open", { path: fullUrl });
+        } else {
+          window.open(fullUrl, "_blank");
+        }
+      } catch (err: any) {
+        console.error("Tauri shell open failed, falling back to window.open:", err);
+        window.open(fullUrl, "_blank");
+      }
+
+      const timer = setInterval(() => {
+        loadServers();
+        if (selectedServer?.id === id) {
+          loadServerDetails(id);
+        }
+      }, 2000);
+
+      setTimeout(() => clearInterval(timer), 180000);
+      return;
+    }
+
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    const popup = window.open(
+      fullUrl,
+      "mcp_oauth_auth",
+      `width=${width},height=${height},top=${top},left=${left},status=no,menubar=no,toolbar=no`
+    );
+
+    if (!popup) {
+      window.location.href = fullUrl;
+      return;
+    }
+
+    const timer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(timer);
+        loadServers();
+        if (selectedServer?.id) {
+          loadServerDetails(selectedServer.id);
+        }
+      }
+    }, 1000);
   };
 
   const handleDelete = (id: string) => {
@@ -132,21 +209,22 @@ export const ServersPage: React.FC = () => {
         </Button>
       </div>
 
-      {oauthError && (
-        <Alert variant="destructive" className="bg-rose-500/10 border-rose-500/30 text-rose-300 font-mono text-xs flex items-center justify-between p-3">
-          <AlertDescription className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
-            <span>OAuth Authorization Warning: {oauthError}</span>
-          </AlertDescription>
+      {authError && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{authError}</span>
+          </div>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setOauthError(null)}
-            className="h-6 px-2 text-xs text-rose-400 hover:text-rose-200 hover:bg-rose-500/20"
+            onClick={() => setAuthError(null)}
+            className="h-7 text-xs text-rose-400 hover:text-rose-200 hover:bg-rose-500/20"
           >
             Dismiss
           </Button>
-        </Alert>
+        </div>
+      )}
       )}
 
       {/* Grid: Server List on Left, Selected Server Detail on Right */}
