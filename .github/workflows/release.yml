@@ -44,12 +44,6 @@ jobs:
       - name: Create sidecar binary directory
         run: mkdir -p src-tauri/bin
 
-      - name: Build Desktop App (macOS Apple Silicon DMG)
-        run: bun run build:desktop
-
-      - name: Verify DMG asset exists
-        run: ls -la src-tauri/target/**/bundle/dmg/*.dmg || ls -la src-tauri/target/release/bundle/dmg/*.dmg
-
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

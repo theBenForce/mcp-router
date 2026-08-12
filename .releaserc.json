@@ -12,6 +12,12 @@
       }
     ],
     [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "bun scripts/update-version.ts ${nextRelease.version} && bun run build:desktop"
+      }
+    ],
+    [
       "@semantic-release/github",
       {
         "assets": [
