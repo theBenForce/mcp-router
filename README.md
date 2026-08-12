@@ -88,6 +88,13 @@ flowchart TB
    mise exec -- bun build:desktop
    ```
 
+> **Note for macOS Release Downloads**:
+> If you download pre-compiled `.dmg` assets from GitHub Releases, macOS Gatekeeper may block direct opening with a security warning. You can immediately remove the quarantine attribute by running:
+> ```bash
+> xattr -d com.apple.quarantine ~/Downloads/MCP.Router_1.0.3_aarch64.dmg
+> ```
+> *(Alternatively, right-click the `.dmg` file and select **Open**).*
+
 ---
 
 ### Option 2: Run with Docker Compose
