@@ -11,22 +11,6 @@
         "npmPublish": false
       }
     ],
-    [
-      "@semantic-release/exec",
-      {
-        "prepareCmd": "bun scripts/update-version.ts ${nextRelease.version} && bun run build:desktop"
-      }
-    ],
-    [
-      "@semantic-release/github",
-      {
-        "assets": [
-          {
-            "path": "src-tauri/target/**/bundle/dmg/*.dmg",
-            "label": "MCP-Router-macOS-AppleSilicon.dmg"
-          }
-        ]
-      }
-    ]
+    "@semantic-release/github"
   ]
 }

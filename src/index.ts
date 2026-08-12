@@ -97,4 +97,9 @@ function startServer(preferredPort: number, maxAttempts = 10) {
   throw new Error(`Failed to bind to any port starting from ${preferredPort}`);
 }
 
-startServer(config.port);
+if (import.meta.main) {
+  startServer(config.port);
+}
+
+export default app;
+
