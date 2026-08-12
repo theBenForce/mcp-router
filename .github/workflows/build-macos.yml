@@ -21,8 +21,11 @@ jobs:
         id: get_tag
         run: |
           TAG="${{ github.event.release.tag_name || github.event.inputs.tag_name }}"
-          if [ -z "$TAG" ]; then
-            TAG="${GITHUB_REF#refs/tags/}"
+          if [ -z "$TAG" ] || [[ "$TAG" == refs/heads/* ]]; then
+            RAW_VER=$(node -p "require('./package.json').version")
+            TAG="v${RAW_VER}"
+          else
+            TAG="${TAG#refs/tags/}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           VERSION="${TAG#v}"
@@ -69,6 +72,8 @@ jobs:
           security unlock-keychain -p "buildkeychain" $KEYCHAIN_PATH
           security import $RUNNER_TEMP/certificate.p12 -k $KEYCHAIN_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "buildkeychain" $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+          security list-keychains -s $KEYCHAIN_PATH
 
       - name: Build Desktop App
         env:
