@@ -5,7 +5,7 @@ import { serveStatic } from "hono/bun";
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config";
-import { getDb } from "./db";
+import { getDb, closeDb } from "./db";
 import serversController from "./api/servers.controller";
 import toolsController from "./api/tools.controller";
 import keysController from "./api/keys.controller";
@@ -57,6 +57,21 @@ getDb();
 upstreamManager.reconnectAll().catch((err) => {
   console.error("[Startup] Server reconnect failed:", err);
 });
+
+// Graceful process shutdown
+const shutdown = async () => {
+  console.log("[Process] Shutdown signal received, cleaning up...");
+  try {
+    await upstreamManager.disconnectAll();
+    closeDb();
+  } catch (err: any) {
+    console.error("[Process] Shutdown error:", err.message);
+  }
+  process.exit(0);
+};
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 
 console.log(`🚀 MCP Router starting on ${config.host}:${config.port}`);
 

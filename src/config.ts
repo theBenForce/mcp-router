@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 
 export interface AppConfig {
   port: number;
@@ -9,7 +10,66 @@ export interface AppConfig {
   isDev: boolean;
 }
 
-const configFilePath = path.join(process.cwd(), "data", "config.json");
+export function getDataDir(): string {
+  if (process.env.MCP_ROUTER_DATA_DIR) {
+    return process.env.MCP_ROUTER_DATA_DIR;
+  }
+  if (process.env.DATA_DIR) {
+    return process.env.DATA_DIR;
+  }
+
+  if (process.env.NODE_ENV === "test") {
+    const testDir = path.join(os.tmpdir(), "mcp-router-test");
+    if (!fs.existsSync(testDir)) {
+      fs.mkdirSync(testDir, { recursive: true });
+    }
+    return testDir;
+  }
+
+  const isDev = process.env.NODE_ENV !== "production";
+  if (isDev) {
+    const localDataDir = path.join(process.cwd(), "data");
+    try {
+      if (!fs.existsSync(localDataDir)) {
+        fs.mkdirSync(localDataDir, { recursive: true });
+      }
+      const testFile = path.join(localDataDir, ".writable_test");
+      fs.writeFileSync(testFile, "ok");
+      fs.unlinkSync(testFile);
+      return localDataDir;
+    } catch {
+      // Fallback to user app data directory if local cwd is read-only
+    }
+  }
+
+  const home = os.homedir();
+  let userDir: string;
+  if (process.platform === "darwin") {
+    userDir = path.join(home, "Library", "Application Support", "mcp-router");
+  } else if (process.platform === "win32") {
+    const appData = process.env.APPDATA || path.join(home, "AppData", "Roaming");
+    userDir = path.join(appData, "mcp-router");
+  } else {
+    const xdgData = process.env.XDG_DATA_HOME || path.join(home, ".local", "share");
+    userDir = path.join(xdgData, "mcp-router");
+  }
+
+  try {
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir, { recursive: true });
+    }
+    return userDir;
+  } catch {
+    const tmpDir = path.join(os.tmpdir(), "mcp-router");
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+    return tmpDir;
+  }
+}
+
+const dataDir = getDataDir();
+const configFilePath = path.join(dataDir, "config.json");
 
 function loadSavedPort(): number {
   try {
@@ -27,9 +87,9 @@ function loadSavedPort(): number {
 
 export function saveAppConfig(updates: { port?: number; host?: string }): AppConfig {
   try {
-    const dataDir = path.dirname(configFilePath);
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
+    const dir = path.dirname(configFilePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
 
     let existing: Record<string, unknown> = {};
@@ -59,7 +119,8 @@ export const config: AppConfig = {
   host: process.env.HOST || "0.0.0.0",
   databasePath:
     process.env.DATABASE_PATH ||
-    (process.env.NODE_ENV === "test" ? ":memory:" : path.join(process.cwd(), "data", "mcp_router.db")),
+    (process.env.NODE_ENV === "test" ? ":memory:" : path.join(dataDir, "mcp_router.db")),
   publicDir: process.env.PUBLIC_DIR || path.join(process.cwd(), "public"),
   isDev: process.env.NODE_ENV !== "production",
 };
+
