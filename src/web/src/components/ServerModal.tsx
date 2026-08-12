@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Alert, AlertDescription } from "./ui/alert";
+import { getApiUrl } from "../lib/api";
 
 export interface ServerModalProps {
   isOpen: boolean;
@@ -145,7 +146,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
     if (!endpointUrl || !endpointUrl.startsWith("http")) return;
     setDiscovering(true);
     try {
-      const res = await fetch(`/api/oauth/discover?url=${encodeURIComponent(endpointUrl)}`);
+      const res = await fetch(getApiUrl(`/api/oauth/discover?url=${encodeURIComponent(endpointUrl)}`));
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.scopes_supported) && data.scopes_supported.length > 0) {
@@ -412,7 +413,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       const endpoint = isEdit ? `/api/servers/${server.id}` : "/api/servers";
       const method = isEdit ? "PUT" : "POST";
 
-      const res = await fetch(endpoint, {
+      const res = await fetch(getApiUrl(endpoint), {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

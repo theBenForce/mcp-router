@@ -22,7 +22,13 @@ export function getDb(): BunSQLiteDatabase<typeof schema> {
   }
 
   sqliteInstance = new Database(config.databasePath);
-  sqliteInstance.exec("PRAGMA journal_mode = WAL;");
+  try {
+    sqliteInstance.exec("PRAGMA journal_mode = WAL;");
+  } catch {
+    try {
+      sqliteInstance.exec("PRAGMA journal_mode = DELETE;");
+    } catch {}
+  }
   sqliteInstance.exec("PRAGMA foreign_keys = ON;");
 
   dbInstance = drizzle(sqliteInstance, { schema });
@@ -59,6 +65,7 @@ export function closeDb(): void {
  * keeping the Drizzle schema as the single source of truth.
  */
 function pushSchema(db: Database) {
+  try { db.exec("PRAGMA foreign_keys = OFF;"); } catch {}
   db.exec(`
     CREATE TABLE IF NOT EXISTS mcp_servers (
       id TEXT PRIMARY KEY,
@@ -243,4 +250,5 @@ function pushSchema(db: Database) {
   try { db.exec("ALTER TABLE mcp_servers ADD COLUMN instructions TEXT"); } catch {}
   try { db.exec("ALTER TABLE mcp_servers ADD COLUMN website_url TEXT"); } catch {}
   try { db.exec("ALTER TABLE mcp_servers ADD COLUMN icons_json TEXT"); } catch {}
+  try { db.exec("PRAGMA foreign_keys = ON;"); } catch {}
 }

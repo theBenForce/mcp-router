@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { config, saveAppConfig } from "../src/config";
+import { config, saveAppConfig, getDataDir } from "../src/config";
+import os from "node:os";
 
 describe("Config Management API", () => {
   test("returns current active configuration", () => {
@@ -16,4 +17,12 @@ describe("Config Management API", () => {
     saveAppConfig({ port: 5170 });
     expect(config.port).toBe(5170);
   });
+
+  test("getDataDir returns valid app data directory", () => {
+    const dataDir = getDataDir();
+    expect(dataDir).toBeDefined();
+    expect(typeof dataDir).toBe("string");
+    expect(dataDir.length).toBeGreaterThan(0);
+  });
 });
+
