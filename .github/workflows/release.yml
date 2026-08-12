@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Build web frontend assets
+        run: cd src/web && bun install --frozen-lockfile && bun run build
+
       - name: Run unit and integration tests
         run: bun test
 
