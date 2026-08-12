@@ -1,0 +1,93 @@
+name: Build macOS Desktop App
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name (e.g. v1.0.2)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build macOS (Apple Silicon)
+    runs-on: macos-14
+    steps:
+      - name: Determine Tag and Version
+        id: get_tag
+        run: |
+          TAG="${{ github.event.release.tag_name || github.event.inputs.tag_name }}"
+          if [ -z "$TAG" ] || [[ "$TAG" == refs/heads/* ]]; then
+            RAW_VER=$(node -p "require('./package.json').version")
+            TAG="v${RAW_VER}"
+          else
+            TAG="${TAG#refs/tags/}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.get_tag.outputs.tag }}
+
+      - name: Setup Node.js & Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Sync Version
+        run: bun scripts/sync-version.ts ${{ steps.get_tag.outputs.version }}
+
+      - name: Install dependencies
+        run: |
+          bun install
+          cd src/web && bun install
+
+      - name: Import Apple Signing Certificate (if configured)
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $RUNNER_TEMP/certificate.p12
+          security create-keychain -p "buildkeychain" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "buildkeychain" $KEYCHAIN_PATH
+          security import $RUNNER_TEMP/certificate.p12 -k $KEYCHAIN_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "buildkeychain" $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+          security list-keychains -s $KEYCHAIN_PATH
+
+      - name: Build Desktop App
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || 'Apple Development: benforce@gmail.com (4NJVFBXFZV)' }}
+        run: bun run build:desktop
+
+      - name: Upload DMG to Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DMG_PATH=$(find src-tauri/target -name "*.dmg" | head -n 1)
+          if [ -z "$DMG_PATH" ]; then
+            echo "Error: No DMG file found in src-tauri/target"
+            exit 1
+          fi
+          echo "Found DMG artifact at $DMG_PATH"
+          gh release upload "${{ steps.get_tag.outputs.tag }}" "$DMG_PATH" --clobber

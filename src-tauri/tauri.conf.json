@@ -28,6 +28,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "macOS": {
+      "signingIdentity": "Apple Development: benforce@gmail.com (4NJVFBXFZV)"
+    },
     "externalBin": [
       "bin/backend"
     ],
