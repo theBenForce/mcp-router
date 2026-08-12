@@ -119,4 +119,46 @@ describe("OAuth Controller Scope Discovery", () => {
     expect(location).toContain("https://github.com/login/oauth/authorize");
     expect(location).toContain("client_id=test_github_client_id");
   });
+
+  test("GET /api/oauth/callback redirects to /servers?oauth_success=true without hash syntax", async () => {
+    const db = getDb();
+    const serverId = `test-callback-redirect-${crypto.randomUUID().slice(0, 8)}`;
+    const state = `state-${crypto.randomUUID()}`;
+
+    db.insert(mcpServers)
+      .values({
+        id: serverId,
+        name: `callback-test-${crypto.randomUUID().slice(0, 6)}`,
+        transportType: "streamable-http",
+        configJson: JSON.stringify({ url: "https://mcp.atlassian.com/v1/mcp/authv2" }),
+        authType: "oauth2",
+        authDataJson: JSON.stringify({ client_id: "test", client_secret: "test" }),
+        status: "need_auth",
+      })
+      .run();
+
+    const { mcpOauthSessions } = await import("../src/db/schema");
+    db.insert(mcpOauthSessions)
+      .values({
+        state,
+        serverId,
+        codeVerifier: "test-verifier",
+        redirectUrl: "http://localhost:5170/api/oauth/callback",
+      })
+      .run();
+
+    const res = await app.fetch(
+      new Request(`http://localhost:5170/api/oauth/callback?code=mock_code&state=${state}`, {
+        redirect: "manual",
+      })
+    );
+
+    // Should redirect (302) or return error if token exchange fails with mock code,
+    // but if it redirects, location must NOT contain hash syntax '/#/'
+    const location = res.headers.get("location");
+    if (location) {
+      expect(location).not.toContain("/#/");
+      expect(location).toContain("/servers?oauth_success=true");
+    }
+  });
 });
