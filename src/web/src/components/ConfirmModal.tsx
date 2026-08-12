@@ -1,7 +1,15 @@
 import React from "react";
 import { AlertTriangle } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
-import { Button } from "./ui/button";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "./ui/alert-dialog";
 
 export interface ConfirmModalProps {
   isOpen: boolean;
@@ -25,24 +33,23 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onConfirm,
 }) => {
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-100 max-w-md shadow-2xl p-6">
-        <DialogHeader className="flex flex-row items-center gap-3">
+    <AlertDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <AlertDialogContent className="bg-zinc-900 border-zinc-800 text-zinc-100 max-w-md shadow-2xl p-6">
+        <AlertDialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400">
             <AlertTriangle className="h-5 w-5" />
           </div>
           <div>
-            <DialogTitle className="font-semibold text-lg text-zinc-100">{title}</DialogTitle>
-            <DialogDescription className="text-xs text-zinc-400 mt-1">{description}</DialogDescription>
+            <AlertDialogTitle className="font-semibold text-lg text-zinc-100">{title}</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-zinc-400 mt-1">{description}</AlertDialogDescription>
           </div>
-        </DialogHeader>
+        </AlertDialogHeader>
 
-        <DialogFooter className="mt-6 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose} className="bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-zinc-300">
+        <AlertDialogFooter className="mt-6 flex justify-end gap-2">
+          <AlertDialogCancel onClick={onClose} className="bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-zinc-300">
             {cancelText}
-          </Button>
-          <Button
-            type="button"
+          </AlertDialogCancel>
+          <AlertDialogAction
             onClick={() => {
               onConfirm();
               onClose();
@@ -54,9 +61,9 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             }
           >
             {confirmText}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 };
