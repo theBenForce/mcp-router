@@ -1,14 +1,18 @@
-import React, { useEffect, useState } from "react";
-import { Plus, Server, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle, Terminal, Globe, Container, Wrench, Key, Pencil, Eye, Edit3, Trash, Play, Cpu, Folder } from "lucide-react";
+import React, { useEffect, useState, useCallback } from "react";
+import { Plus, Server, RefreshCw, Trash2, CheckCircle, XCircle, AlertTriangle, Terminal, Globe, Container, Wrench, Key, Pencil, Eye, Edit3, Trash, Play, Cpu, Folder, Search, X } from "lucide-react";
 import { AddServerModal } from "../components/AddServerModal";
 import { ServerModal } from "../components/ServerModal";
 import { AuthModal } from "../components/AuthModal";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { ServerLogsModal } from "../components/ServerLogsModal";
+import { TwoPaneLayout } from "../components/TwoPaneLayout";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "../components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useServerEvents, type ServerStatusEventPayload } from "../hooks/useServerEvents";
 
 const ACTION_BADGES: Record<string, { label: string; bg: string; text: string; border: string; icon: any }> = {
   read: { label: "READ", bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/20", icon: Eye },
@@ -24,19 +28,57 @@ export const ServersPage: React.FC = () => {
   const [editingServer, setEditingServer] = useState<any | null>(null);
   const [authModalServer, setAuthModalServer] = useState<any | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [logsModalServer, setLogsModalServer] = useState<any | null>(null);
   const [deletingServerId, setDeletingServerId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [oauthError, setOauthError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "connected" | "need_auth" | "error">("all");
+  const [loading, setLoading] = useState(false);
+
+  const handleStatusChange = useCallback((event: ServerStatusEventPayload) => {
+    setServers((prevServers) =>
+      prevServers.map((srv) =>
+        srv.id === event.serverId
+          ? { ...srv, status: event.status, last_error: event.lastError ?? srv.last_error }
+          : srv
+      )
+    );
+
+    if (selectedServer?.id === event.serverId) {
+      loadServerDetails(event.serverId);
+    }
+  }, [selectedServer?.id]);
+
+  useServerEvents({
+    onStatusChange: handleStatusChange,
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get("oauth_error");
     if (err) {
-      setOauthError(err);
+      setAuthError(err);
       // Clean up query param from address bar without reloading
       window.history.replaceState({}, "", window.location.pathname);
     }
     loadServers();
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "MCP_OAUTH_COMPLETE") {
+        loadServers();
+        if (event.data.serverId) {
+          loadServerDetails(event.data.serverId);
+        }
+        if (event.data.error) {
+          setAuthError(event.data.error);
+        } else {
+          setAuthError(null);
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   const loadServers = async () => {
@@ -44,9 +86,14 @@ export const ServersPage: React.FC = () => {
     try {
       const res = await fetch("/api/servers");
       const data = await res.json();
-      setServers(data);
-      if (data.length > 0 && !selectedServer) {
-        loadServerDetails(data[0].id);
+      const sorted = Array.isArray(data)
+        ? [...data].sort((a: any, b: any) =>
+            (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+          )
+        : [];
+      setServers(sorted);
+      if (sorted.length > 0 && !selectedServer) {
+        loadServerDetails(sorted[0].id);
       }
     } catch (e) {
       console.error("Failed to fetch servers:", e);
@@ -77,8 +124,69 @@ export const ServersPage: React.FC = () => {
     }
   };
 
-  const handleOAuthAuthorize = (id: string) => {
-    window.location.href = `/api/oauth/authorize?serverId=${id}`;
+  const handleOAuthAuthorize = async (id: string) => {
+    setAuthError(null);
+    const authPath = `/api/oauth/authorize?serverId=${id}`;
+    const fullUrl = new URL(authPath, window.location.origin).href;
+
+    const isTauri = Boolean(
+      (window as any).__TAURI__ ||
+      (window as any).__TAURI_INTERNALS__
+    );
+
+    if (isTauri) {
+      try {
+        const tauri = (window as any).__TAURI__;
+        if (tauri?.shell?.open) {
+          await tauri.shell.open(fullUrl);
+        } else if (tauri?.core?.invoke) {
+          await tauri.core.invoke("plugin:shell|open", { path: fullUrl });
+        } else if ((window as any).__TAURI_INTERNALS__?.invoke) {
+          await (window as any).__TAURI_INTERNALS__.invoke("plugin:shell|open", { path: fullUrl });
+        } else {
+          window.open(fullUrl, "_blank");
+        }
+      } catch (err: any) {
+        console.error("Tauri shell open failed, falling back to window.open:", err);
+        window.open(fullUrl, "_blank");
+      }
+
+      const timer = setInterval(() => {
+        loadServers();
+        if (selectedServer?.id === id) {
+          loadServerDetails(id);
+        }
+      }, 2000);
+
+      setTimeout(() => clearInterval(timer), 180000);
+      return;
+    }
+
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    const popup = window.open(
+      fullUrl,
+      "mcp_oauth_auth",
+      `width=${width},height=${height},top=${top},left=${left},status=no,menubar=no,toolbar=no`
+    );
+
+    if (!popup) {
+      window.location.href = fullUrl;
+      return;
+    }
+
+    const timer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(timer);
+        loadServers();
+        if (selectedServer?.id) {
+          loadServerDetails(selectedServer.id);
+        }
+      }
+    }, 1000);
   };
 
   const handleDelete = (id: string) => {
@@ -115,127 +223,220 @@ export const ServersPage: React.FC = () => {
     }
   };
 
+  const filteredServers = servers.filter((server) => {
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      server.name.toLowerCase().includes(q) ||
+      (server.description && server.description.toLowerCase().includes(q)) ||
+      (server.transport_type && server.transport_type.toLowerCase().includes(q)) ||
+      (server.executor_type && server.executor_type.toLowerCase().includes(q));
+
+    const matchesStatus =
+      statusFilter === "all" ? true : server.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const statusCounts = {
+    all: servers.length,
+    connected: servers.filter((s) => s.status === "connected").length,
+    need_auth: servers.filter((s) => s.status === "need_auth").length,
+    error: servers.filter((s) => s.status === "error").length,
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-100">MCP Servers</h1>
-          <p className="text-sm text-zinc-400">Manage upstream stdio sidecars, remote SSE, and Streamable HTTP OAuth endpoints</p>
-        </div>
-        <Button
-          onClick={() => setIsAddModalOpen(true)}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 shadow-lg shadow-indigo-600/20"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Add MCP Server</span>
-        </Button>
-      </div>
+    <>
+      <TwoPaneLayout
+        title="MCP Servers"
+        description="Manage upstream stdio sidecars, remote SSE, and Streamable HTTP OAuth endpoints"
+        actionLabel="Add MCP Server"
+        onActionClick={() => setIsAddModalOpen(true)}
+        banner={
+          authError ? (
+            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{authError}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAuthError(null)}
+                className="h-7 text-xs text-rose-400 hover:text-rose-200 hover:bg-rose-500/20"
+              >
+                Dismiss
+              </Button>
+            </div>
+          ) : undefined
+        }
+        leftHeader={
+          <div className="space-y-2 shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
+              <Input
+                type="text"
+                placeholder="Search servers by name or transport..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 pr-8 h-9 text-xs bg-zinc-950/60 border-zinc-800 text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/50 focus:ring-indigo-500/20"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-2.5 text-zinc-500 hover:text-zinc-300"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
 
-      {oauthError && (
-        <Alert variant="destructive" className="bg-rose-500/10 border-rose-500/30 text-rose-300 font-mono text-xs flex items-center justify-between p-3">
-          <AlertDescription className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
-            <span>OAuth Authorization Warning: {oauthError}</span>
-          </AlertDescription>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setOauthError(null)}
-            className="h-6 px-2 text-xs text-rose-400 hover:text-rose-200 hover:bg-rose-500/20"
-          >
-            Dismiss
-          </Button>
-        </Alert>
-      )}
-
-      {/* Grid: Server List on Left, Selected Server Detail on Right */}
-      <div className="grid grid-cols-12 gap-6">
-        {/* Left Column: Servers List */}
-        <div className="col-span-5 space-y-3">
-          {loading ? (
-            <div className="py-8 text-center text-xs text-zinc-500 font-mono">Loading servers...</div>
-          ) : servers.length === 0 ? (
-            <Card className="p-6 glass-panel border-zinc-800 bg-zinc-900/50 text-center text-xs text-zinc-500 font-mono">
-              No servers added yet. Click "Add MCP Server" to get started.
-            </Card>
-          ) : (
-            servers.map((server) => {
-              const isSelected = selectedServer?.id === server.id;
-              return (
-                <Card
-                  key={server.id}
-                  onClick={() => loadServerDetails(server.id)}
-                  className={`p-4 cursor-pointer border transition-all ${
-                    isSelected
-                      ? "bg-indigo-600/10 border-indigo-500/50 shadow-md shadow-indigo-500/5"
-                      : "glass-panel bg-zinc-900/50 border-zinc-800 hover:bg-zinc-900/80"
+            <div className="flex items-center gap-1.5 pb-1 overflow-x-auto no-scrollbar">
+              {[
+                { id: "all", label: "All", count: statusCounts.all },
+                { id: "connected", label: "Connected", count: statusCounts.connected },
+                { id: "need_auth", label: "Needs Auth", count: statusCounts.need_auth },
+                { id: "error", label: "Error", count: statusCounts.error },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setStatusFilter(tab.id as any)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all shrink-0 flex items-center gap-1.5 ${
+                    statusFilter === tab.id
+                      ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-zinc-800/40"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      {server.transport_type === "stdio" && server.executor_type === "host" ? (
-                        <Cpu className="h-4 w-4 text-emerald-400 shrink-0" />
-                      ) : server.transport_type === "stdio" ? (
-                        <Terminal className="h-4 w-4 text-indigo-400 shrink-0" />
-                      ) : server.transport_type === "docker" ? (
-                        <Container className="h-4 w-4 text-cyan-400 shrink-0" />
-                      ) : (
-                        <Globe className="h-4 w-4 text-emerald-400 shrink-0" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-sm text-zinc-100 truncate">{server.name}</h3>
-                        <p className="text-xs text-zinc-400 truncate">{server.description || "No description"}</p>
+                  <span>{tab.label}</span>
+                  <span className={`font-mono text-[10px] ${statusFilter === tab.id ? "text-indigo-400" : "text-zinc-500"}`}>
+                    ({tab.count})
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        }
+        leftContent={
+          <div className="space-y-2.5 pr-1">
+            {loading ? (
+              <div className="py-8 text-center text-xs text-zinc-500 font-mono">Loading servers...</div>
+            ) : filteredServers.length === 0 ? (
+              <Card className="p-6 glass-panel border-zinc-800 bg-zinc-900/50 text-center text-xs text-zinc-500 font-mono">
+                {searchQuery || statusFilter !== "all"
+                  ? "No servers match your filter criteria."
+                  : 'No servers added yet. Click "Add MCP Server" to get started.'}
+              </Card>
+            ) : (
+              filteredServers.map((server) => {
+                const isSelected = selectedServer?.id === server.id;
+                const toolCount = server.tools?.length;
+
+                return (
+                  <div
+                    key={server.id}
+                    onClick={() => loadServerDetails(server.id)}
+                    className={`group relative p-3.5 rounded-xl border transition-all duration-150 cursor-pointer ${
+                      isSelected
+                        ? "bg-indigo-600/10 border-indigo-500/40 shadow-md shadow-indigo-500/5 text-zinc-100"
+                        : "glass-panel bg-zinc-900/40 border-zinc-800/80 hover:bg-zinc-900/80 hover:border-zinc-700/80 text-zinc-300"
+                    }`}
+                  >
+                    {isSelected && (
+                      <div className="absolute left-0 top-3 bottom-3 w-1 bg-indigo-500 rounded-r-full shadow-sm shadow-indigo-500" />
+                    )}
+
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {server.transport_type === "stdio" && server.executor_type === "host" ? (
+                            <Cpu className="h-4 w-4 text-emerald-400 shrink-0" />
+                          ) : server.transport_type === "stdio" ? (
+                            <Terminal className="h-4 w-4 text-indigo-400 shrink-0" />
+                          ) : server.transport_type === "docker" ? (
+                            <Container className="h-4 w-4 text-cyan-400 shrink-0" />
+                          ) : (
+                            <Globe className="h-4 w-4 text-emerald-400 shrink-0" />
+                          )}
+                          <h3 className="font-semibold text-sm text-zinc-100 truncate">{server.name}</h3>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLogsModalServer(server);
+                            }}
+                            className="h-6 w-6 text-zinc-400 hover:text-indigo-300 hover:bg-zinc-800/80"
+                            title="View Server Logs"
+                          >
+                            <Terminal className="h-3 w-3 text-indigo-400" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingServer(server);
+                            }}
+                            className="h-6 w-6 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
+                            title="Edit MCP Server"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+
+                          <Badge
+                            variant="outline"
+                            className={`gap-1 font-mono text-[10px] px-2 py-0.5 shrink-0 ${
+                              server.status === "connected"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : server.status === "need_auth"
+                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                : server.status === "error"
+                                ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                            }`}
+                          >
+                            {server.status === "connected" && <CheckCircle className="h-2.5 w-2.5" />}
+                            {server.status === "need_auth" && <Key className="h-2.5 w-2.5" />}
+                            {server.status === "error" && <XCircle className="h-2.5 w-2.5" />}
+                            {server.status === "need_auth" ? "Needs Auth" : server.status}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-zinc-400 line-clamp-1">
+                        {server.description || "No description provided."}
+                      </p>
+
+                      <div className="flex items-center justify-between text-[10px] font-mono pt-1 text-zinc-500 border-t border-zinc-800/40">
+                        <span className="capitalize text-zinc-400 bg-zinc-950/60 px-1.5 py-0.5 rounded border border-zinc-800/60">
+                          {server.transport_type === "stdio" && server.executor_type === "host"
+                            ? "host stdio"
+                            : server.transport_type === "docker"
+                            ? "docker sidecar"
+                            : server.transport_type}
+                        </span>
+                        {toolCount !== undefined && (
+                          <span className="text-zinc-400">
+                            {toolCount} tool{toolCount === 1 ? "" : "s"}
+                          </span>
+                        )}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {/* Edit button on list item */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingServer(server);
-                        }}
-                        className="h-7 w-7 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-                        title="Edit MCP Server"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-
-                      {/* Status Badge */}
-                      <Badge
-                        variant="outline"
-                        className={`gap-1 font-mono text-[11px] shrink-0 ${
-                          server.status === "connected"
-                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                            : server.status === "need_auth"
-                            ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                            : server.status === "error"
-                            ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                            : "bg-zinc-800 text-zinc-400 border-zinc-700"
-                        }`}
-                      >
-                        {server.status === "connected" && <CheckCircle className="h-3 w-3" />}
-                        {server.status === "need_auth" && <Key className="h-3 w-3" />}
-                        {server.status === "error" && <XCircle className="h-3 w-3" />}
-                        {server.status === "need_auth" ? "Needs Auth" : server.status}
-                      </Badge>
-                    </div>
                   </div>
-                </Card>
-              );
-            })
-          )}
-        </div>
-
-        {/* Right Column: Server Details & Tools */}
-        <div className="col-span-7">
-          {selectedServer ? (
-            <Card className="glass-panel border-zinc-800 bg-zinc-900/50 p-6 space-y-6">
+                );
+              })
+            )}
+          </div>
+        }
+        rightContent={
+          selectedServer ? (
+            <Card className="glass-panel border-zinc-800 bg-zinc-900/50 p-6 flex flex-col h-full min-h-0 overflow-hidden">
               {/* Server Header & Actions */}
-              <div className="flex items-start justify-between border-b border-zinc-800/80 pb-4">
+              <div className="flex items-start justify-between border-b border-zinc-800/80 pb-4 shrink-0">
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-bold text-zinc-100">{selectedServer.name}</h2>
@@ -276,6 +477,16 @@ export const ServersPage: React.FC = () => {
                   <Button
                     variant="secondary"
                     size="sm"
+                    onClick={() => setLogsModalServer(selectedServer)}
+                    className="gap-1.5"
+                    title="View Server Logs"
+                  >
+                    <Terminal className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>Logs</span>
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setEditingServer(selectedServer)}
                     className="gap-1.5"
                     title="Edit MCP Server parameters"
@@ -304,230 +515,232 @@ export const ServersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Config & Metadata Details */}
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <span className="text-zinc-500 block mb-1">Transport</span>
-                  <span className="font-mono text-zinc-200">{selectedServer.transport_type}</span>
-                </div>
-                <div>
-                  <span className="text-zinc-500 block mb-1">Execution Mode</span>
-                  <span className="font-mono text-zinc-200">
-                    {selectedServer.executor_type === "host" ? (
-                      <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                        <Cpu className="h-3 w-3 inline" /> Host OS Direct
+              {/* Scrollable details & tools container */}
+              <ScrollArea className="flex-1 min-h-0 pt-4 pr-2">
+                <div className="space-y-6">
+                  {/* Config & Metadata Details */}
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <span className="text-zinc-500 block mb-1">Transport</span>
+                      <span className="font-mono text-zinc-200">{selectedServer.transport_type}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block mb-1">Execution Mode</span>
+                      <span className="font-mono text-zinc-200">
+                        {selectedServer.executor_type === "host" ? (
+                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                            <Cpu className="h-3 w-3 inline" /> Host OS Direct
+                          </span>
+                        ) : (
+                          <span className="text-cyan-400 font-semibold flex items-center gap-1">
+                            <Container className="h-3 w-3 inline" /> Docker Sidecar
+                          </span>
+                        )}
                       </span>
-                    ) : (
-                      <span className="text-cyan-400 font-semibold flex items-center gap-1">
-                        <Container className="h-3 w-3 inline" /> Docker Sidecar
-                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block mb-1">Auth Type</span>
+                      <span className="font-mono text-zinc-200">{selectedServer.auth_type}</span>
+                    </div>
+                    {selectedServer.server_version && (
+                      <div>
+                        <span className="text-zinc-500 block mb-1">Server Version</span>
+                        <span className="font-mono text-zinc-200">{selectedServer.server_version}</span>
+                      </div>
                     )}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-500 block mb-1">Auth Type</span>
-                  <span className="font-mono text-zinc-200">{selectedServer.auth_type}</span>
-                </div>
-                {selectedServer.server_version && (
-                  <div>
-                    <span className="text-zinc-500 block mb-1">Server Version</span>
-                    <span className="font-mono text-zinc-200">{selectedServer.server_version}</span>
+                    {selectedServer.website_url && (
+                      <div>
+                        <span className="text-zinc-500 block mb-1">Website</span>
+                        <a
+                          href={selectedServer.website_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-indigo-400 hover:underline flex items-center gap-1"
+                        >
+                          <Globe className="h-3 w-3 inline" />
+                          <span>{selectedServer.website_url}</span>
+                        </a>
+                      </div>
+                    )}
                   </div>
-                )}
-                {selectedServer.website_url && (
-                  <div>
-                    <span className="text-zinc-500 block mb-1">Website</span>
-                    <a
-                      href={selectedServer.website_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-indigo-400 hover:underline flex items-center gap-1"
-                    >
-                      <Globe className="h-3 w-3 inline" />
-                      <span>{selectedServer.website_url}</span>
-                    </a>
-                  </div>
-                )}
-              </div>
 
-              {/* System Instructions if provided by MCP server */}
-              {selectedServer.instructions && (
-                <div className="p-3 rounded-lg bg-indigo-500/5 border border-indigo-500/10 space-y-1">
-                  <span className="text-[11px] font-semibold tracking-wider text-indigo-400 uppercase block">System Instructions</span>
-                  <p className="text-xs text-zinc-300 whitespace-pre-wrap">{selectedServer.instructions}</p>
-                </div>
-              )}
-
-              {/* Sidecar / Docker container details */}
-              {(selectedServer.transport_type === "docker" || selectedServer.transport_type === "stdio") && selectedServer.config && (
-                <div className="space-y-2 p-3 rounded-lg bg-zinc-950/40 border border-zinc-800/60">
-                  {selectedServer.config.cwd && (
-                    <div>
-                      <span className="text-zinc-500 block mb-1 text-xs">Working Directory (cwd)</span>
-                      <span className="font-mono text-indigo-300 text-xs flex items-center gap-1">
-                        <Folder className="h-3 w-3 inline text-indigo-400" />
-                        {selectedServer.config.cwd}
-                      </span>
+                  {/* System Instructions if provided by MCP server */}
+                  {selectedServer.instructions && (
+                    <div className="p-3 rounded-lg bg-indigo-500/5 border border-indigo-500/10 space-y-1">
+                      <span className="text-[11px] font-semibold tracking-wider text-indigo-400 uppercase block">System Instructions</span>
+                      <p className="text-xs text-zinc-300 whitespace-pre-wrap">{selectedServer.instructions}</p>
                     </div>
                   )}
-                  {selectedServer.config.image && (
-                    <div>
-                      <span className="text-zinc-500 block mb-1 text-xs">Docker Image</span>
-                      <span className="font-mono text-zinc-200 text-xs">{selectedServer.config.image}</span>
-                    </div>
-                  )}
-                  {selectedServer.config.env && Object.keys(selectedServer.config.env).length > 0 && (
-                    <div>
-                      <span className="text-zinc-500 block mb-1 text-xs">Environment Variables</span>
-                      <div className="space-y-1">
-                        {Object.entries(selectedServer.config.env).map(([k, v]) => (
-                          <div key={k} className="font-mono text-xs text-zinc-300">
-                            <span className="text-indigo-400">{k}</span>=<span className="text-zinc-400">{v as string}</span>
+
+                  {/* Sidecar / Docker container details */}
+                  {(selectedServer.transport_type === "docker" || selectedServer.transport_type === "stdio") && selectedServer.config && (
+                    <div className="space-y-2 p-3 rounded-lg bg-zinc-950/40 border border-zinc-800/60">
+                      {selectedServer.config.cwd && (
+                        <div>
+                          <span className="text-zinc-500 block mb-1 text-xs">Working Directory (cwd)</span>
+                          <span className="font-mono text-indigo-300 text-xs flex items-center gap-1">
+                            <Folder className="h-3 w-3 inline text-indigo-400" />
+                            {selectedServer.config.cwd}
+                          </span>
+                        </div>
+                      )}
+                      {selectedServer.config.image && (
+                        <div>
+                          <span className="text-zinc-500 block mb-1 text-xs">Docker Image</span>
+                          <span className="font-mono text-zinc-200 text-xs">{selectedServer.config.image}</span>
+                        </div>
+                      )}
+                      {selectedServer.config.env && Object.keys(selectedServer.config.env).length > 0 && (
+                        <div>
+                          <span className="text-zinc-500 block mb-1 text-xs">Environment Variables</span>
+                          <div className="space-y-1">
+                            {Object.entries(selectedServer.config.env).map(([k, v]) => (
+                              <div key={k} className="font-mono text-xs text-zinc-300">
+                                <span className="text-indigo-400">{k}</span>=<span className="text-zinc-400">{v as string}</span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {selectedServer.config.volumes && Array.isArray(selectedServer.config.volumes) && selectedServer.config.volumes.length > 0 && (
-                    <div>
-                      <span className="text-zinc-500 block mb-1 text-xs">Volume Mappings</span>
-                      <div className="space-y-1">
-                        {selectedServer.config.volumes.map((vStr: string, idx: number) => {
-                          const [h, ...cParts] = vStr.split(":");
-                          const c = cParts.join(":");
-                          return (
-                            <div key={idx} className="font-mono text-xs text-zinc-300">
-                              <span className="text-cyan-400">{h}</span>
-                              <span className="text-zinc-500"> ➔ </span>
-                              <span className="text-zinc-400">{c || h}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {selectedServer.last_error && (
-                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono space-y-1">
-                  <span className="font-semibold text-rose-300 uppercase tracking-wider text-[10px] block">Server Log & Connection Error</span>
-                  <pre className="whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto pr-1 text-rose-300">
-                    {selectedServer.last_error}
-                  </pre>
-                </div>
-              )}
-
-              {/* Discovered Tools List Grouped by Permission Action */}
-              {(() => {
-                const toolsByAction: Record<string, any[]> = {
-                  read: [],
-                  write: [],
-                  delete: [],
-                  execute: [],
-                };
-                for (const tool of selectedServer.tools || []) {
-                  const type = tool.action_type || "write";
-                  if (!toolsByAction[type]) toolsByAction[type] = [];
-                  toolsByAction[type].push(tool);
-                }
-
-                return (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-400">
-                        Discovered Tools ({selectedServer.tools?.length || 0})
-                      </h3>
-                      <span className="text-[11px] text-zinc-500">Grouped by permission action type</span>
-                    </div>
-
-                    {selectedServer.tools?.length === 0 ? (
-                      <div className="py-6 text-center text-xs text-zinc-500 font-mono">
-                        No tools discovered. Reconnect server to discover tools.
-                      </div>
-                    ) : (
-                      <Accordion type="multiple" defaultValue={["read", "write", "delete", "execute"]} className="space-y-3">
-                        {(["read", "write", "delete", "execute"] as const).map((type) => {
-                          const categoryTools = toolsByAction[type];
-                          if (categoryTools.length === 0) return null;
-                          const badge = ACTION_BADGES[type];
-                          const Icon = badge.icon;
-
-                          return (
-                            <AccordionItem key={type} value={type} className="border border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-950/60 px-4">
-                              <AccordionTrigger className="hover:no-underline py-3">
-                                <div className="flex items-center justify-between w-full pr-2">
-                                  <div className="flex items-center gap-2">
-                                    <Icon className={`h-4 w-4 ${badge.text}`} />
-                                    <span className="font-semibold text-xs uppercase tracking-wider text-zinc-200">
-                                      {type} Tools
-                                    </span>
-                                  </div>
-                                  <Badge variant="outline" className={`text-[10px] font-mono font-semibold ${badge.bg} ${badge.text} ${badge.border}`}>
-                                    {categoryTools.length} tool(s)
-                                  </Badge>
+                        </div>
+                      )}
+                      {selectedServer.config.volumes && Array.isArray(selectedServer.config.volumes) && selectedServer.config.volumes.length > 0 && (
+                        <div>
+                          <span className="text-zinc-500 block mb-1 text-xs">Volume Mappings</span>
+                          <div className="space-y-1">
+                            {selectedServer.config.volumes.map((vStr: string, idx: number) => {
+                              const [h, ...cParts] = vStr.split(":");
+                              const c = cParts.join(":");
+                              return (
+                                <div key={idx} className="font-mono text-xs text-zinc-300">
+                                  <span className="text-cyan-400">{h}</span>
+                                  <span className="text-zinc-500"> ➔ </span>
+                                  <span className="text-zinc-400">{c || h}</span>
                                 </div>
-                              </AccordionTrigger>
-                              <AccordionContent>
-                                <div className="space-y-2 pt-1">
-                                  {categoryTools.map((tool: any) => (
-                                    <div
-                                      key={tool.id}
-                                      className="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/60 space-y-1"
-                                    >
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                          <Wrench className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-                                          <span className="font-mono text-xs font-semibold text-zinc-200">
-                                            {tool.namespaced_name}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <select
-                                            value={tool.action_type || "write"}
-                                            onChange={(e) => handleUpdateToolAction(tool.id, e.target.value)}
-                                            className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded border bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer ${
-                                              tool.action_type === "read"
-                                                ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
-                                                : tool.action_type === "delete"
-                                                ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                                                : tool.action_type === "execute"
-                                                ? "bg-purple-500/10 text-purple-400 border-purple-500/30"
-                                                : "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                                            }`}
-                                            title="Click to override action permissions category"
-                                          >
-                                            <option value="read" className="bg-zinc-900 text-blue-400">READ</option>
-                                            <option value="write" className="bg-zinc-900 text-amber-400">WRITE</option>
-                                            <option value="delete" className="bg-zinc-900 text-rose-400">DELETE</option>
-                                            <option value="execute" className="bg-zinc-900 text-purple-400">EXECUTE</option>
-                                          </select>
-                                          <span className="text-[10px] text-zinc-500 font-mono">({tool.name})</span>
-                                        </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedServer.last_error && (
+                    <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">
+                      Error: {selectedServer.last_error}
+                    </div>
+                  )}
+
+                  {/* Discovered Tools List Grouped by Permission Action */}
+                  {(() => {
+                    const toolsByAction: Record<string, any[]> = {
+                      read: [],
+                      write: [],
+                      delete: [],
+                      execute: [],
+                    };
+                    for (const tool of selectedServer.tools || []) {
+                      const type = tool.action_type || "write";
+                      if (!toolsByAction[type]) toolsByAction[type] = [];
+                      toolsByAction[type].push(tool);
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-400">
+                            Discovered Tools ({selectedServer.tools?.length || 0})
+                          </h3>
+                          <span className="text-[11px] text-zinc-500">Grouped by permission action type</span>
+                        </div>
+
+                        {selectedServer.tools?.length === 0 ? (
+                          <div className="py-6 text-center text-xs text-zinc-500 font-mono">
+                            No tools discovered. Reconnect server to discover tools.
+                          </div>
+                        ) : (
+                          <Accordion type="multiple" defaultValue={["read", "write", "delete", "execute"]} className="space-y-3">
+                            {(["read", "write", "delete", "execute"] as const).map((type) => {
+                              const categoryTools = toolsByAction[type];
+                              if (categoryTools.length === 0) return null;
+                              const badge = ACTION_BADGES[type];
+                              const Icon = badge.icon;
+
+                              return (
+                                <AccordionItem key={type} value={type} className="border border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-950/60 px-4">
+                                  <AccordionTrigger className="hover:no-underline py-3">
+                                    <div className="flex items-center justify-between w-full pr-2">
+                                      <div className="flex items-center gap-2">
+                                        <Icon className={`h-4 w-4 ${badge.text}`} />
+                                        <span className="font-semibold text-xs uppercase tracking-wider text-zinc-200">
+                                          {type} Tools
+                                        </span>
                                       </div>
-                                      {tool.description && (
-                                        <p className="text-xs text-zinc-400 pl-5">{tool.description}</p>
-                                      )}
+                                      <Badge variant="outline" className={`text-[10px] font-mono font-semibold ${badge.bg} ${badge.text} ${badge.border}`}>
+                                        {categoryTools.length} tool(s)
+                                      </Badge>
                                     </div>
-                                  ))}
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-                          );
-                        })}
-                      </Accordion>
-                    )}
-                  </div>
-                );
-              })()}
+                                  </AccordionTrigger>
+                                  <AccordionContent>
+                                    <div className="space-y-2 pt-1">
+                                      {categoryTools.map((tool: any) => (
+                                        <div
+                                          key={tool.id}
+                                          className="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/60 space-y-1"
+                                        >
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                              <Wrench className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                                              <span className="font-mono text-xs font-semibold text-zinc-200">
+                                                {tool.namespaced_name}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <select
+                                                value={tool.action_type || "write"}
+                                                onChange={(e) => handleUpdateToolAction(tool.id, e.target.value)}
+                                                className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded border bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer ${
+                                                  tool.action_type === "read"
+                                                    ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                                                    : tool.action_type === "delete"
+                                                    ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                                                    : tool.action_type === "execute"
+                                                    ? "bg-purple-500/10 text-purple-400 border-purple-500/30"
+                                                    : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                                                }`}
+                                                title="Click to override action permissions category"
+                                              >
+                                                <option value="read" className="bg-zinc-900 text-blue-400">READ</option>
+                                                <option value="write" className="bg-zinc-900 text-amber-400">WRITE</option>
+                                                <option value="delete" className="bg-zinc-900 text-rose-400">DELETE</option>
+                                                <option value="execute" className="bg-zinc-900 text-purple-400">EXECUTE</option>
+                                              </select>
+                                              <span className="text-[10px] text-zinc-500 font-mono">({tool.name})</span>
+                                            </div>
+                                          </div>
+                                          {tool.description && (
+                                            <p className="text-xs text-zinc-400 pl-5">{tool.description}</p>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
+                              );
+                            })}
+                          </Accordion>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </ScrollArea>
             </Card>
           ) : (
-            <Card className="glass-panel border-zinc-800 bg-zinc-900/50 p-12 text-center text-xs text-zinc-500 font-mono">
+            <Card className="glass-panel border-zinc-800 bg-zinc-900/50 p-12 text-center text-xs text-zinc-500 font-mono flex-1 flex items-center justify-center">
               Select a server to view details and discovered tools.
             </Card>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
       {/* Add Modal */}
       <AddServerModal
@@ -571,6 +784,13 @@ export const ServersPage: React.FC = () => {
         onClose={() => setDeletingServerId(null)}
         onConfirm={confirmDeleteServer}
       />
-    </div>
+
+      {/* Server Logs Modal */}
+      <ServerLogsModal
+        isOpen={Boolean(logsModalServer)}
+        server={logsModalServer}
+        onClose={() => setLogsModalServer(null)}
+      />
+    </>
   );
 };

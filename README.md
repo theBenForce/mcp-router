@@ -88,14 +88,15 @@ flowchart TB
    mise exec -- bun build:desktop
    ```
 
-> **Note for macOS Release Downloads**:
-> If you download pre-compiled `.dmg` assets from GitHub Releases, macOS Gatekeeper may block direct opening with a security warning. You can immediately remove the quarantine attribute by running:
+> [!NOTE]
+> **Downloaded DMG Error ("MCP Router.app is damaged and can't be opened")**:
+> When downloading the `.dmg` from GitHub Releases, macOS Gatekeeper tags unsigned apps downloaded from the web with a quarantine flag. To open the app after dragging it to `/Applications`, run this command in your terminal:
 > ```bash
-> xattr -d com.apple.quarantine ~/Downloads/MCP.Router_1.0.3_aarch64.dmg
+> xattr -cr "/Applications/MCP Router.app"
 > ```
-> *(Alternatively, right-click the `.dmg` file and select **Open**).*
 
 ---
+
 
 ### Option 2: Run with Docker Compose
 

@@ -24,6 +24,100 @@ function createTimeoutFetch(timeoutMs = 10000) {
   };
 }
 
+function renderOAuthResultHtml(options: {
+  success: boolean;
+  title: string;
+  message: string;
+  detail?: string;
+  serverId?: string;
+}) {
+  const { success, title, message, detail, serverId } = options;
+  const iconSvg = success
+    ? `<svg class="w-12 h-12 text-emerald-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>`
+    : `<svg class="w-12 h-12 text-rose-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`;
+
+  const escapedDetail = detail ? detail.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+
+  return `<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title} - MCP Router</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-950 text-zinc-100 flex items-center justify-center min-h-screen p-4 font-sans">
+  <div class="max-w-md w-full bg-zinc-900/90 border border-zinc-800 rounded-2xl p-6 text-center shadow-2xl backdrop-blur-xl space-y-4">
+    ${iconSvg}
+    <h1 class="text-xl font-bold ${success ? "text-emerald-400" : "text-rose-400"}">${title}</h1>
+    <p class="text-sm text-zinc-300">${message}</p>
+    ${escapedDetail ? `<div class="p-3 bg-zinc-950/80 border border-zinc-800 rounded-lg text-xs text-zinc-400 font-mono text-left break-all">${escapedDetail}</div>` : ""}
+    <div class="pt-2 flex flex-col gap-2">
+      <button onclick="closeOrRedirect()" class="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg text-sm transition-colors shadow-lg shadow-indigo-600/20 cursor-pointer">
+        Close Window
+      </button>
+      <a href="/#/servers" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Return to Dashboard</a>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const payload = {
+        type: 'MCP_OAUTH_COMPLETE',
+        success: ${success},
+        serverId: ${JSON.stringify(serverId || "")},
+        error: ${JSON.stringify(success ? null : (detail || message))}
+      };
+      if (window.opener) {
+        try {
+          window.opener.postMessage(payload, '*');
+        } catch (e) {
+          console.error('Failed to postMessage to opener:', e);
+        }
+        if (${success}) {
+          setTimeout(() => {
+            window.close();
+          }, 1200);
+        }
+      }
+    })();
+
+    function closeOrRedirect() {
+      if (window.opener) {
+        window.close();
+      } else {
+        window.location.href = '/#/servers?oauth_success=${success}';
+      }
+    }
+  </script>
+</body>
+</html>`;
+}
+
+function respondError(
+  c: any,
+  status: number,
+  error: string,
+  description?: string,
+  serverId?: string
+) {
+  const isHtml = c.req.header("accept")?.includes("text/html");
+  if (!isHtml) {
+    return c.json({ error, description }, status);
+  }
+  const detail = description ? `${error}: ${description}` : error;
+  return c.html(
+    renderOAuthResultHtml({
+      success: false,
+      title: "OAuth Authorization Error",
+      message: error,
+      detail,
+      serverId,
+    }),
+    status
+  );
+}
+
 /**
  * GET /api/oauth/discover?url=xxx
  * Discovers OAuth 2.1 authorization server metadata (RFC 8414/9728)
@@ -65,12 +159,12 @@ app.get("/discover", async (c) => {
 app.get("/authorize", async (c) => {
   const serverId = c.req.query("serverId");
   if (!serverId) {
-    return c.json({ error: "Missing required parameter: serverId" }, 400);
+    return respondError(c, 400, "Missing required parameter: serverId");
   }
 
   const server = serverService.getServer(serverId);
   if (!server) {
-    return c.json({ error: `Server with ID ${serverId} not found` }, 404);
+    return respondError(c, 404, `Server with ID ${serverId} not found`, undefined, serverId);
   }
 
   const host = c.req.header("host") || "";
@@ -100,7 +194,7 @@ app.get("/authorize", async (c) => {
     const config = typeof configJsonStr === "string" ? JSON.parse(configJsonStr) : configJsonStr;
     const serverUrl = config.url;
     if (!serverUrl) {
-      return sendError(`Server '${server.name}' does not have a remote HTTP URL configured for OAuth.`, 400);
+      return respondError(c, 400, "Server config must contain a valid url for OAuth", undefined, serverId);
     }
 
     const oauthProvider = new MCPRouterOAuthProvider({ serverId });
@@ -163,7 +257,7 @@ app.get("/authorize", async (c) => {
     return c.redirect(authorizationUrl.toString());
   } catch (err: any) {
     console.error(`[OAuthController] Authorization error for server ${serverId}:`, err);
-    return sendError(err.message || String(err), 500);
+    return respondError(c, 500, err.message || String(err), undefined, serverId);
   }
 });
 
@@ -178,14 +272,16 @@ app.get("/callback", async (c) => {
   const errorDescription = c.req.query("error_description");
 
   if (errorParam) {
-    return c.json(
-      { error: `OAuth Authorization Error: ${errorParam}`, description: errorDescription },
-      400
+    return respondError(
+      c,
+      400,
+      `OAuth Authorization Error: ${errorParam}`,
+      errorDescription
     );
   }
 
   if (!code || !state) {
-    return c.json({ error: "Missing required query parameters: code and state" }, 400);
+    return respondError(c, 400, "Missing required query parameters: code and state");
   }
 
   const db = getDb();
@@ -196,13 +292,13 @@ app.get("/callback", async (c) => {
     .get();
 
   if (!session) {
-    return c.json({ error: `Invalid or expired OAuth state session: ${state}` }, 400);
+    return respondError(c, 400, `Invalid or expired OAuth state session: ${state}`);
   }
 
   const serverId = session.serverId;
   const server = serverService.getServer(serverId);
   if (!server) {
-    return c.json({ error: `Server with ID ${serverId} not found` }, 404);
+    return respondError(c, 404, `Server with ID ${serverId} not found`, undefined, serverId);
   }
 
   try {
@@ -234,21 +330,32 @@ app.get("/callback", async (c) => {
       console.error(`[OAuthController] Background connect failed after OAuth for ${serverId}:`, err);
     });
 
-    // Redirect to frontend dashboard with success query param.
-    // If request comes from Vite dev server or host header, redirect appropriately.
+    const isHtml = c.req.header("accept")?.includes("text/html");
+    if (isHtml) {
+      return c.html(
+        renderOAuthResultHtml({
+          success: true,
+          title: "Authorization Successful",
+          message: `Successfully authenticated server "${server.name}". You may close this window.`,
+          serverId,
+        })
+      );
+    }
+
+    // Redirect to frontend dashboard with success query param for full page navigations.
     const host = c.req.header("host") || "";
     const referer = c.req.header("referer") || "";
     let redirectTarget = "/servers?oauth_success=true";
     if (host.includes("5170") || referer.includes("5173")) {
-      // Dev mode: frontend is on 5173
       const hostname = host.split(":")[0] || "localhost";
       redirectTarget = `http://${hostname}:5173/servers?oauth_success=true`;
     }
     return c.redirect(redirectTarget);
   } catch (err: any) {
     console.error(`[OAuthController] Token exchange failed for server ${serverId}:`, err);
-    return c.json({ error: err.message || String(err) }, 500);
+    return respondError(c, 500, err.message || String(err), undefined, serverId);
   }
 });
 
 export default app;
+

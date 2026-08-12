@@ -42,4 +42,18 @@ describe("OAuth Controller Routes", () => {
     const data = await res.json();
     expect(data.error).toContain("Missing required query parameters");
   });
+
+  test("GET /callback returns HTML with error page and postMessage for browser navigation", async () => {
+    const res = await oauthController.request("/callback?error=invalid_scope&error_description=requested+scope+is+not+allowed", {
+      headers: { Accept: "text/html" },
+    });
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    expect(html).toContain("<!DOCTYPE html>");
+    expect(html).toContain("OAuth Authorization Error");
+    expect(html).toContain("invalid_scope");
+    expect(html).toContain("requested scope is not allowed");
+    expect(html).toContain("MCP_OAUTH_COMPLETE");
+  });
 });
+

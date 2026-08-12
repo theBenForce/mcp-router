@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { mcpServers, mcpTools } from "../db/schema";
 import { upstreamManager } from "../mcp/upstream/manager";
+import { serverLogStore } from "../mcp/upstream/logger";
 
 export interface CreateServerInput {
   name: string;
@@ -47,7 +48,7 @@ export class ServerService {
       .from(mcpServers)
       .leftJoin(mcpTools, eq(mcpServers.id, mcpTools.serverId))
       .groupBy(mcpServers.id)
-      .orderBy(sql`${mcpServers.createdAt} DESC`)
+      .orderBy(sql`LOWER(${mcpServers.name}) ASC`, sql`${mcpServers.name} ASC`)
       .all();
 
     return rows.map((s) => {
@@ -192,6 +193,7 @@ export class ServerService {
 
   async deleteServer(id: string) {
     await upstreamManager.disconnectServer(id);
+    serverLogStore.clearLogs(id);
     const db = getDb();
     db.delete(mcpServers).where(eq(mcpServers.id, id)).run();
     return true;

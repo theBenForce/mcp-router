@@ -1,6 +1,7 @@
 import Docker from "dockerode";
 import net from "node:net";
 import { PassThrough, Readable, Writable } from "node:stream";
+import { serverLogStore } from "./logger";
 
 export interface StdioConfig {
   image?: string;
@@ -106,7 +107,8 @@ export class SidecarManager {
    * environments and Bun's broken HTTP upgrade event handling.
    */
   private attachRawStream(
-    containerId: string
+    containerId: string,
+    serverId?: string
   ): Promise<{ socket: net.Socket; readable: Readable; writable: Writable }> {
     return new Promise((resolve, reject) => {
       const socket = net.createConnection(this.socketPath);
@@ -125,7 +127,13 @@ export class SidecarManager {
       const writable = new PassThrough();
 
       stderrStream.on("data", (chunk: Buffer) => {
-        console.error(`[Sidecar ${containerId.substring(0, 12)} stderr]:`, chunk.toString().trim());
+        const str = chunk.toString().trim();
+        if (str) {
+          console.error(`[Sidecar ${containerId.substring(0, 12)} stderr]:`, str);
+          if (serverId) {
+            serverLogStore.addLog(serverId, "stderr", str);
+          }
+        }
       });
 
       socket.on("data", (chunk: Buffer) => {
@@ -263,7 +271,7 @@ export class SidecarManager {
     // and works around Bun's lack of HTTP upgrade event support.
     await container.start();
 
-    const { socket: rawSocket, readable, writable } = await this.attachRawStream(container.id);
+    const { socket: rawSocket, readable, writable } = await this.attachRawStream(container.id, serverId);
 
     const stop = async () => {
       try {

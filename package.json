@@ -16,7 +16,7 @@
     "db:studio": "bun --bun drizzle-kit studio",
     "dev:all": "bun --watch src/index.ts & cd src/web && bun run dev",
     "tauri": "tauri",
-    "dev:desktop": "tauri dev",
+    "dev:desktop": "bun scripts/build-backend.ts && tauri dev",
     "build:desktop": "bun run build:web && bun scripts/build-backend.ts && tauri build",
     "sync-version": "bun scripts/sync-version.ts"
   },

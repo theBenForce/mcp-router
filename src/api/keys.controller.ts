@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { keyService } from "../services/key.service";
+import { serverService } from "../services/server.service";
+import { filterEngine } from "../mcp/downstream/filter";
 
 const app = new Hono();
 
@@ -33,6 +35,30 @@ app.get("/:id", (c) => {
   return c.json(key);
 });
 
+// Get servers and prompts allowed for an API key (for export config)
+app.get("/:id/allowed-servers", (c) => {
+  const id = c.req.param("id");
+  const key = keyService.getKey(id);
+  if (!key) {
+    return c.json({ error: "API Key not found" }, 404);
+  }
+
+  const allowedTools = filterEngine.filterToolsList(id);
+  const serverIdsWithTools = new Set(allowedTools.map((t) => t.server_id));
+
+  const allServers = serverService.listServers();
+  const allowedServers = allServers.filter(
+    (s) => s.status === "connected" && serverIdsWithTools.has(s.id)
+  );
+
+  const allowedPrompts = filterEngine.filterPromptsList(id);
+
+  return c.json({
+    servers: allowedServers,
+    hasPromptsAccess: allowedPrompts.length > 0,
+  });
+});
+
 // Revoke API key
 app.delete("/:id", (c) => {
   const id = c.req.param("id");
@@ -60,3 +86,4 @@ app.put("/:id/permissions", async (c) => {
 });
 
 export default app;
+

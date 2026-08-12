@@ -90,6 +90,9 @@ export const PermissionMatrixModal: React.FC<PermissionMatrixModalProps> = ({
           tools: detail.tools || [],
         });
       }
+      serverItems.sort((a, b) =>
+        (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+      );
       setServers(serverItems);
 
       const permsRes = await fetch(`/api/keys/${keyId}/permissions`);

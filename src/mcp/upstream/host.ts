@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import path from "node:path";
 import os from "node:os";
+import { serverLogStore } from "./logger";
 
 export interface HostProcessConfig {
   command?: string;
@@ -66,7 +67,9 @@ export class HostProcessManager {
     const args = config.args || [];
     const env = getAugmentedEnv(config.env);
 
-    console.log(`[HostProcessManager] Spawning host process for ${serverId}: ${command} ${args.join(" ")}`);
+    const spawnMsg = `Spawning host process: ${command} ${args.join(" ")}`;
+    console.log(`[HostProcessManager] ${spawnMsg} for ${serverId}`);
+    serverLogStore.addLog(serverId, "info", `[HostProcess] ${spawnMsg}`);
 
     return new Promise((resolve, reject) => {
       let isSettled = false;
@@ -89,6 +92,7 @@ export class HostProcessManager {
           msg = `Host command '${command}' not found on PATH. Please ensure '${command}' (Node.js/uv/Bun) is installed or switch execution mode to Docker sidecar.`;
         }
         console.error(`[HostProcessManager] Spawn error for ${serverId}:`, msg);
+        serverLogStore.addLog(serverId, "error", `[HostProcess Error] ${msg}`);
         this.activeProcesses.delete(serverId);
         if (!isSettled) {
           isSettled = true;
@@ -98,6 +102,7 @@ export class HostProcessManager {
 
       if (!proc.stdout || !proc.stdin) {
         const err = new Error(`Failed to initialize stdio pipes for host process: ${command}`);
+        serverLogStore.addLog(serverId, "error", `[HostProcess Error] ${err.message}`);
         this.activeProcesses.delete(serverId);
         if (!isSettled) {
           isSettled = true;
@@ -113,6 +118,7 @@ export class HostProcessManager {
             console.error(`[HostProcess ${serverId.substring(0, 8)} stderr]:`, text);
             stderrBuffer.push(text);
             if (stderrBuffer.length > 50) stderrBuffer.shift();
+            serverLogStore.addLog(serverId, "stderr", text);
           }
         });
       }
@@ -120,6 +126,7 @@ export class HostProcessManager {
       const stop = async (): Promise<void> => {
         try {
           if (proc.pid && !proc.killed) {
+            serverLogStore.addLog(serverId, "info", `[HostProcess] Stopping host process (PID: ${proc.pid})`);
             if (process.platform !== "win32") {
               // Kill entire process group tree (negative PID)
               try {
@@ -149,7 +156,9 @@ export class HostProcessManager {
       };
 
       proc.on("exit", (code, signal) => {
-        console.log(`[HostProcess ${serverId.substring(0, 8)}] Process exited with code ${code}, signal ${signal}`);
+        const exitMsg = `Process exited with code ${code}, signal ${signal}`;
+        console.log(`[HostProcess ${serverId.substring(0, 8)}] ${exitMsg}`);
+        serverLogStore.addLog(serverId, code === 0 ? "info" : "error", `[HostProcess] ${exitMsg}`);
         this.activeProcesses.delete(serverId);
       });
 

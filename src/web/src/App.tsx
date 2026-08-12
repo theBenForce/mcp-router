@@ -46,13 +46,13 @@ export const App: React.FC = () => {
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-screen bg-zinc-950 text-zinc-100 font-sans">
+      <div className="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100 font-sans">
         <Sidebar
           serverCount={serverCount}
           promptCount={promptCount}
           keyCount={keyCount}
         />
-        <main className="flex-1 p-8 overflow-y-auto">
+        <main className="flex-1 p-8 h-full flex flex-col min-h-0 overflow-hidden">
           <Routes>
             <Route path="/" element={<OverviewPage />} />
             <Route path="/servers" element={<ServersPage />} />

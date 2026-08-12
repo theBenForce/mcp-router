@@ -3,8 +3,10 @@ import { X, Server, Terminal, Globe, Container, Key, Shield, Plus, Trash2, Cpu, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
 import { Alert, AlertDescription } from "./ui/alert";
 import { getApiUrl } from "../lib/api";
+import { normalizeCliText } from "../lib/utils";
 
 export interface ServerModalProps {
   isOpen: boolean;
@@ -55,7 +57,8 @@ const PRESET_SERVERS = [
  * Minimal docker run command parser for the frontend.
  * Extracts image, env vars, and inferred name from a docker run command string.
  */
-function parseDockerRunCommand(cmd: string) {
+function parseDockerRunCommand(rawCmd: string) {
+  const cmd = normalizeCliText(rawCmd);
   const tokens = cmd.trim().split(/\s+/);
   let i = 0;
   if (tokens[0] === "docker") i++;
@@ -122,6 +125,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   const [command, setCommand] = useState("npx");
   const [argsStr, setArgsStr] = useState("-y @modelcontextprotocol/server-filesystem /data");
   const [image, setImage] = useState("");
+  const [useDocker, setUseDocker] = useState(false);
 
   // Remote (SSE / HTTP) fields
   const [url, setUrl] = useState("");
@@ -279,6 +283,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         setArgsStr(Array.isArray(cfg.args) ? cfg.args.join(" ") : cfg.args || "");
         setCwd(cfg.cwd || "");
         setImage(cfg.image || "");
+        setUseDocker(Boolean(cfg.useDocker));
         if (cfg.env && typeof cfg.env === "object") {
           setEnvVars(Object.entries(cfg.env).map(([k, v]) => ({ key: k, value: String(v) })));
         } else {
@@ -288,6 +293,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       } else if (tType === "docker") {
         setRawCommand(cfg.rawCommand || "");
         setDockerImage(cfg.image || "");
+        setUseDocker(true);
         if (cfg.env && typeof cfg.env === "object") {
           setEnvVars(Object.entries(cfg.env).map(([k, v]) => ({ key: k, value: String(v) })));
         } else {
@@ -296,6 +302,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         setVolumes(parseVolumes(cfg.volumes));
       } else {
         setUrl(cfg.url || "");
+        setUseDocker(false);
       }
 
       const aType = server.auth_type || server.authType || "none";
@@ -326,6 +333,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       setArgsStr("-y @modelcontextprotocol/server-filesystem /data");
       setCwd("");
       setImage("");
+      setUseDocker(false);
       setUrl("");
       setRawCommand("");
       setDockerImage("");
@@ -346,9 +354,10 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   if (!isOpen) return null;
 
   const handleRawCommandChange = (value: string) => {
-    setRawCommand(value);
-    if (value.trim()) {
-      const parsed = parseDockerRunCommand(value);
+    const cleanVal = normalizeCliText(value);
+    setRawCommand(cleanVal);
+    if (cleanVal.trim()) {
+      const parsed = parseDockerRunCommand(cleanVal);
       setDockerImage(parsed.image);
       setEnvVars(parsed.env);
       setVolumes(parsed.volumes);
@@ -414,6 +423,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
           command: cmd,
           args,
           ...(cwd.trim() ? { cwd: cwd.trim() } : {}),
+          ...(useDocker ? { useDocker: true } : {}),
           ...(image.trim() ? { image: image.trim() } : {}),
           ...(Object.keys(envObj).length > 0 ? { env: envObj } : {}),
           ...(volumeStrs.length > 0 ? { volumes: volumeStrs } : {}),
@@ -662,7 +672,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                   required
                   placeholder="npx, uvx, bunx, python"
                   value={command}
-                  onChange={(e) => setCommand(e.target.value)}
+                  onChange={(e) => setCommand(normalizeCliText(e.target.value))}
                   className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
                 />
               </div>
@@ -673,7 +683,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                   type="text"
                   placeholder="-y @modelcontextprotocol/server-filesystem /data"
                   value={argsStr}
-                  onChange={(e) => setArgsStr(e.target.value)}
+                  onChange={(e) => setArgsStr(normalizeCliText(e.target.value))}
                   className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
                 />
               </div>
@@ -699,11 +709,24 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                     type="text"
                     placeholder="Defaults to node:22-alpine or ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
                     value={image}
-                    onChange={(e) => setImage(e.target.value)}
+                    onChange={(e) => setImage(normalizeCliText(e.target.value))}
                     className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-indigo-500"
                   />
                 </div>
               )}
+
+              <div className="flex items-center space-x-2 pt-1 pb-1">
+                <input
+                  type="checkbox"
+                  id="useDocker"
+                  checked={useDocker}
+                  onChange={(e) => setUseDocker(e.target.checked)}
+                  className="rounded border-zinc-800 bg-zinc-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <label htmlFor="useDocker" className="text-xs text-zinc-300 cursor-pointer select-none">
+                  Run in Docker Sidecar container (<code className="text-[11px] text-zinc-400">useDocker</code>)
+                </label>
+              </div>
 
               {/* Environment Variables */}
               <div>
@@ -830,12 +853,12 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                 <label className="block text-xs font-medium text-zinc-300 mb-1">
                   Quick Import — Paste docker run command
                 </label>
-                <textarea
+                <Textarea
                   rows={3}
                   placeholder="docker run -i --rm -e KEY=VALUE ghcr.io/org/image:tag"
                   value={rawCommand}
                   onChange={(e) => handleRawCommandChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-sm font-mono text-zinc-100 focus:outline-none focus:border-cyan-500 resize-none"
+                  className="w-full bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-cyan-500 resize-none"
                 />
                 <p className="text-[11px] text-zinc-500 mt-1">
                   Paste a full docker run command to auto-fill fields below
@@ -850,7 +873,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                   required
                   placeholder="ghcr.io/org/mcp-server:latest"
                   value={dockerImage}
-                  onChange={(e) => setDockerImage(e.target.value)}
+                  onChange={(e) => setDockerImage(normalizeCliText(e.target.value))}
                   className="bg-zinc-900 border-zinc-800 text-sm font-mono text-zinc-100 focus:border-cyan-500"
                 />
               </div>

@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { Plus, MessageSquare, Trash2, Code2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Plus, MessageSquare, Trash2, Code2, Search, X } from "lucide-react";
 import { AddPromptModal } from "../components/AddPromptModal";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { TwoPaneLayout } from "../components/TwoPaneLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export const PromptsPage: React.FC = () => {
   const [prompts, setPrompts] = useState<any[]>([]);
@@ -12,6 +15,7 @@ export const PromptsPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [deletingPromptId, setDeletingPromptId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     loadPrompts();
@@ -52,76 +56,114 @@ export const PromptsPage: React.FC = () => {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-100">MCP Prompts</h1>
-          <p className="text-sm text-zinc-400">
-            Define reusable prompt templates exposed as slash commands in Claude Code, Cursor, etc.
-          </p>
-        </div>
-        <Button
-          onClick={() => setIsAddModalOpen(true)}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 shadow-lg shadow-indigo-600/20"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Add Prompt</span>
-        </Button>
-      </div>
+  const filteredPrompts = prompts.filter((prompt) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      (prompt.name && prompt.name.toLowerCase().includes(q)) ||
+      (prompt.title && prompt.title.toLowerCase().includes(q)) ||
+      (prompt.description && prompt.description.toLowerCase().includes(q)) ||
+      (prompt.content_template && prompt.content_template.toLowerCase().includes(q))
+    );
+  });
 
-      {/* Grid: Prompt List on Left, Selected Prompt Detail on Right */}
-      <div className="grid grid-cols-12 gap-6">
-        {/* Left Column: Prompts List */}
-        <div className="col-span-5 space-y-3">
-          {loading ? (
-            <div className="py-8 text-center text-xs text-zinc-500 font-mono">Loading prompts...</div>
-          ) : prompts.length === 0 ? (
-            <Card className="glass-panel border-zinc-800 bg-zinc-900/50 p-6 text-center text-xs text-zinc-500 font-mono">
-              No prompts created yet. Click "Add Prompt" to get started.
-            </Card>
-          ) : (
-            prompts.map((prompt) => {
-              const isSelected = selectedPrompt?.id === prompt.id;
-              return (
-                <Card
-                  key={prompt.id}
-                  onClick={() => setSelectedPrompt(prompt)}
-                  className={`p-4 cursor-pointer border transition-all ${
-                    isSelected
-                      ? "bg-indigo-600/10 border-indigo-500/50 shadow-md shadow-indigo-500/5"
-                      : "glass-panel bg-zinc-900/50 border-zinc-800 hover:bg-zinc-900/80"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <MessageSquare className="h-4 w-4 text-purple-400 shrink-0" />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-sm text-zinc-100">{prompt.title || prompt.name}</h3>
-                          <Badge variant="outline" className="font-mono text-[10px] text-indigo-400 bg-indigo-500/10 border-indigo-500/20">
-                            /{prompt.name}
-                          </Badge>
+  return (
+    <>
+      <TwoPaneLayout
+        title="MCP Prompts"
+        description="Define reusable prompt templates exposed as slash commands in Claude Code, Cursor, etc."
+        actionLabel="Add Prompt"
+        onActionClick={() => setIsAddModalOpen(true)}
+        leftHeader={
+          <div className="relative shrink-0">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
+            <Input
+              type="text"
+              placeholder="Search prompts by name or command..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 pr-8 h-9 text-xs bg-zinc-950/60 border-zinc-800 text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/50 focus:ring-indigo-500/20"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-2.5 text-zinc-500 hover:text-zinc-300"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        }
+        leftContent={
+          <div className="space-y-2.5 pr-1">
+            {loading ? (
+              <div className="py-8 text-center text-xs text-zinc-500 font-mono">Loading prompts...</div>
+            ) : filteredPrompts.length === 0 ? (
+              <Card className="glass-panel border-zinc-800 bg-zinc-900/50 p-6 text-center text-xs text-zinc-500 font-mono">
+                {searchQuery
+                  ? "No prompts match your search."
+                  : 'No prompts created yet. Click "Add Prompt" to get started.'}
+              </Card>
+            ) : (
+              filteredPrompts.map((prompt) => {
+                const isSelected = selectedPrompt?.id === prompt.id;
+                const argCount = prompt.arguments?.length || 0;
+
+                return (
+                  <div
+                    key={prompt.id}
+                    onClick={() => setSelectedPrompt(prompt)}
+                    className={`group relative p-3.5 rounded-xl border transition-all duration-150 cursor-pointer ${
+                      isSelected
+                        ? "bg-indigo-600/10 border-indigo-500/40 shadow-md shadow-indigo-500/5 text-zinc-100"
+                        : "glass-panel bg-zinc-900/40 border-zinc-800/80 hover:bg-zinc-900/80 hover:border-zinc-700/80 text-zinc-300"
+                    }`}
+                  >
+                    {isSelected && (
+                      <div className="absolute left-0 top-3 bottom-3 w-1 bg-indigo-500 rounded-r-full shadow-sm shadow-indigo-500" />
+                    )}
+
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <MessageSquare className="h-4 w-4 text-purple-400 shrink-0" />
+                          <h3 className="font-semibold text-sm text-zinc-100 truncate">
+                            {prompt.title || prompt.name}
+                          </h3>
                         </div>
-                        <p className="text-xs text-zinc-400 line-clamp-1 mt-0.5">
-                          {prompt.description || "No description"}
-                        </p>
+
+                        <Badge
+                          variant="outline"
+                          className="font-mono text-[10px] text-indigo-400 bg-indigo-500/10 border-indigo-500/20 shrink-0"
+                        >
+                          /{prompt.name}
+                        </Badge>
+                      </div>
+
+                      <p className="text-xs text-zinc-400 line-clamp-1">
+                        {prompt.description || "No description provided."}
+                      </p>
+
+                      <div className="flex items-center justify-between text-[10px] font-mono pt-1 text-zinc-500 border-t border-zinc-800/40">
+                        <span className="text-zinc-400">
+                          {argCount} arg{argCount === 1 ? "" : "s"}
+                        </span>
+                        <span className="text-zinc-500 font-mono text-[10px]">
+                          command template
+                        </span>
                       </div>
                     </div>
                   </div>
-                </Card>
-              );
-            })
-          )}
-        </div>
-
-        {/* Right Column: Selected Prompt Details & Template */}
-        <div className="col-span-7">
-          {selectedPrompt ? (
-            <Card className="glass-panel border-zinc-800 bg-zinc-900/50 p-6 space-y-6">
-              {/* Prompt Header & Actions */}
-              <div className="flex items-start justify-between border-b border-zinc-800/80 pb-4">
+                );
+              })
+            )}
+          </div>
+        }
+        rightContent={
+          selectedPrompt ? (
+            <Card className="glass-panel border-zinc-800 bg-zinc-900/50 p-6 flex flex-col h-full min-h-0 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-zinc-800/80 pb-4 shrink-0">
                 <div>
                   <div className="flex items-center gap-3">
                     <h2 className="text-lg font-bold text-zinc-100">
@@ -138,67 +180,73 @@ export const PromptsPage: React.FC = () => {
                   size="icon"
                   onClick={() => handleDelete(selectedPrompt.id)}
                   className="h-8 w-8 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+                  title="Delete Prompt"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
 
-              {/* Declared Arguments */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-400">
-                  Declared Arguments ({selectedPrompt.arguments?.length || 0})
-                </h3>
+              {/* Scrollable details */}
+              <ScrollArea className="flex-1 min-h-0 pt-4 pr-2">
+                <div className="space-y-6">
+                  {/* Declared Arguments */}
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-400">
+                      Declared Arguments ({selectedPrompt.arguments?.length || 0})
+                    </h3>
 
-                {selectedPrompt.arguments?.length === 0 ? (
-                  <p className="text-xs text-zinc-500 italic">No arguments required for this prompt.</p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    {selectedPrompt.arguments?.map((arg: any, idx: number) => (
-                      <div
-                        key={idx}
-                        className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/60 flex items-start justify-between"
-                      >
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-xs font-semibold text-indigo-300">
-                              {arg.name}
-                            </span>
-                            {arg.required ? (
-                              <Badge variant="outline" className="text-[10px] text-rose-400 border-0 p-0 font-mono">required</Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] text-zinc-500 border-0 p-0 font-mono">optional</Badge>
-                            )}
+                    {selectedPrompt.arguments?.length === 0 ? (
+                      <p className="text-xs text-zinc-500 italic">No arguments required for this prompt.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {selectedPrompt.arguments?.map((arg: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/60 flex items-start justify-between"
+                          >
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-xs font-semibold text-indigo-300">
+                                  {arg.name}
+                                </span>
+                                {arg.required ? (
+                                  <Badge variant="outline" className="text-[10px] text-rose-400 border-0 p-0 font-mono">required</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] text-zinc-500 border-0 p-0 font-mono">optional</Badge>
+                                )}
+                              </div>
+                              {arg.description && (
+                                <p className="text-xs text-zinc-400 mt-0.5">{arg.description}</p>
+                              )}
+                            </div>
                           </div>
-                          {arg.description && (
-                            <p className="text-xs text-zinc-400 mt-0.5">{arg.description}</p>
-                          )}
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* Template Content */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                    <Code2 className="h-3.5 w-3.5 text-purple-400" />
-                    Content Template
-                  </h3>
+                  {/* Template Content */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                        <Code2 className="h-3.5 w-3.5 text-purple-400" />
+                        Content Template
+                      </h3>
+                    </div>
+                    <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800/80 font-mono text-xs text-zinc-200 whitespace-pre-wrap overflow-x-auto leading-relaxed">
+                      {selectedPrompt.content_template}
+                    </div>
+                  </div>
                 </div>
-                <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800/80 font-mono text-xs text-zinc-200 whitespace-pre-wrap overflow-x-auto leading-relaxed">
-                  {selectedPrompt.content_template}
-                </div>
-              </div>
+              </ScrollArea>
             </Card>
           ) : (
-            <Card className="glass-panel border-zinc-800 bg-zinc-900/50 p-12 text-center text-xs text-zinc-500 font-mono">
+            <Card className="glass-panel border-zinc-800 bg-zinc-900/50 p-12 text-center text-xs text-zinc-500 font-mono flex-1 flex items-center justify-center">
               Select a prompt to view details and template content.
             </Card>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
       <AddPromptModal
         isOpen={isAddModalOpen}
@@ -214,6 +262,6 @@ export const PromptsPage: React.FC = () => {
         onClose={() => setDeletingPromptId(null)}
         onConfirm={confirmDeletePrompt}
       />
-    </div>
+    </>
   );
 };

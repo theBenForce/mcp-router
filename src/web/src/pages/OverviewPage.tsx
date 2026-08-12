@@ -52,7 +52,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
   const connectedServersCount = servers.filter((s) => s.status === "connected").length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 h-full overflow-y-auto pr-1">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-zinc-100">System Overview</h1>

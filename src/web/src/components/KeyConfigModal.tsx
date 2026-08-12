@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Copy, Check, Terminal, Globe, Layers, Settings2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+
 
 interface KeyConfigModalProps {
   isOpen: boolean;
@@ -35,15 +37,17 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
   const loadData = async () => {
     setLoading(true);
     try {
-      const [serversRes, configRes] = await Promise.all([
-        fetch("/api/servers"),
-        fetch("/api/config").catch(() => null),
-      ]);
-      const data = await serversRes.json();
-      const connected = data.filter((s: any) => s.status === "connected");
-      setServers(connected);
-      setSelectedServers(connected.map((s: any) => s.id));
-
+      const res = await fetch(`/api/keys/${keyId}/allowed-servers`);
+      if (res.ok) {
+        const data = await res.json();
+        const allowedServers = (data.servers || []).sort((a: any, b: any) =>
+          (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+        );
+        setServers(allowedServers);
+        setSelectedServers(allowedServers.map((s: any) => s.id));
+        setIncludePrompts(Boolean(data.hasPromptsAccess));
+      }
+      const configRes = await fetch("/api/config").catch(() => null);
       if (configRes && configRes.ok) {
         const configData = await configRes.json();
         if (configData.port) {
@@ -51,13 +55,14 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
         }
       }
     } catch (err) {
-      console.error("Failed to load servers/config for modal:", err);
+      console.error("Failed to load allowed servers for config modal:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !keyId) return null;
+
 
   const origin = `${window.location.protocol}//${window.location.hostname}:${gatewayPort}`;
   const tokenPlaceholder = userKeyToken.trim() || "<YOUR_API_KEY>";
@@ -86,7 +91,9 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
         }
       }
 
-      const activeList = servers.filter((s) => selectedServers.includes(s.id));
+      const activeList = servers
+        .filter((s) => selectedServers.includes(s.id))
+        .sort((a, b) => (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" }));
       for (const s of activeList) {
         const keyNameSlug = s.name.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
         const sseUrl = `${origin}/mcp/servers/${s.id}/sse?key=${tokenPlaceholder}`;
@@ -148,12 +155,12 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
           {/* Optional secret key input */}
           <div className="space-y-1.5">
             <label className="text-zinc-300 font-medium block">API Key Secret (Optional)</label>
-            <input
+            <Input
               type="text"
               placeholder="Paste secret token (e.g. mcpr_...) to populate URLs"
               value={userKeyToken}
               onChange={(e) => setUserKeyToken(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 font-mono text-xs focus:outline-none focus:border-indigo-500/50"
+              className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 font-mono text-xs focus:border-indigo-500/50"
             />
           </div>
 
@@ -235,33 +242,41 @@ export const KeyConfigModal: React.FC<KeyConfigModalProps> = ({
           {routingMode === "per-server" && (
             <div className="space-y-2 border-t border-zinc-800/60 pt-4">
               <label className="text-zinc-300 font-medium block">Included Servers & Resources</label>
-              <div className="flex flex-wrap gap-2 pt-1">
-                <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 cursor-pointer hover:border-zinc-700">
-                  <input
-                    type="checkbox"
-                    checked={includePrompts}
-                    onChange={(e) => setIncludePrompts(e.target.checked)}
-                    className="rounded bg-zinc-950 border-zinc-700 text-indigo-500 focus:ring-0"
-                  />
-                  <span className="font-semibold text-indigo-300">Prompt Library</span>
-                </label>
-                {servers.map((s) => (
-                  <label
-                    key={s.id}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 cursor-pointer hover:border-zinc-700"
-                  >
+              {servers.length === 0 && !includePrompts ? (
+                <p className="text-zinc-500 italic py-1 font-mono text-[11px]">
+                  No servers or tools are currently enabled for this API key.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-300 cursor-pointer hover:border-zinc-700">
                     <input
                       type="checkbox"
-                      checked={selectedServers.includes(s.id)}
-                      onChange={() => toggleServer(s.id)}
-                      className="rounded bg-zinc-950 border-zinc-700 text-indigo-500 focus:ring-0"
+                      checked={includePrompts}
+                      onChange={(e) => setIncludePrompts(e.target.checked)}
+                      className="rounded bg-zinc-900 border-zinc-700 text-indigo-500 focus:ring-0"
                     />
-                    <span>{s.server_title || s.name}</span>
+                    <span className="font-semibold text-indigo-300">Prompt Library</span>
                   </label>
-                ))}
-              </div>
+                  {servers.map((s) => (
+                    <label
+                      key={s.id}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-300 cursor-pointer hover:border-zinc-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedServers.includes(s.id)}
+                        onChange={() => toggleServer(s.id)}
+                        className="rounded bg-zinc-900 border-zinc-700 text-indigo-500 focus:ring-0"
+                      />
+                      <span>{s.server_title || s.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           )}
+
+
 
           {/* Code Output Block */}
           <div className="space-y-2 pt-2">

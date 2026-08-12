@@ -3,6 +3,7 @@ import { X, Plus, Trash2, HelpCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
 import { Checkbox } from "./ui/checkbox";
 import { Alert, AlertDescription } from "./ui/alert";
 
@@ -179,12 +180,12 @@ export const AddPromptModal: React.FC<AddPromptModalProps> = ({
                 <HelpCircle className="h-3 w-3" /> Use {"{{argName}}"} placeholders
               </span>
             </div>
-            <textarea
+            <Textarea
               rows={4}
               placeholder="Please review the following {{language}} code:\n\n```{{language}}\n{{code}}\n```"
               value={contentTemplate}
               onChange={(e) => setContentTemplate(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 font-mono focus:outline-none focus:border-indigo-500 resize-none"
+              className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 font-mono focus:border-indigo-500 resize-none"
               required
             />
           </div>
