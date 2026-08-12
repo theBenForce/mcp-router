@@ -73,10 +73,28 @@ const shutdown = async () => {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
-console.log(`🚀 MCP Router starting on ${config.host}:${config.port}`);
+function startServer(preferredPort: number, maxAttempts = 10) {
+  let currentPort = preferredPort;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const server = Bun.serve({
+        port: currentPort,
+        hostname: config.host,
+        fetch: app.fetch,
+      });
+      console.log(`🚀 MCP Router starting on ${config.host}:${server.port}`);
+      config.port = server.port;
+      return server;
+    } catch (err: any) {
+      if (err?.code === "EADDRINUSE" || err?.message?.includes("EADDRINUSE")) {
+        console.warn(`[Server] Port ${currentPort} in use, trying ${currentPort + 1}...`);
+        currentPort++;
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error(`Failed to bind to any port starting from ${preferredPort}`);
+}
 
-export default {
-  port: config.port,
-  hostname: config.host,
-  fetch: app.fetch,
-};
+startServer(config.port);

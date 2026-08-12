@@ -15,7 +15,17 @@ export const App: React.FC = () => {
   const location = useLocation();
 
   useEffect(() => {
-    fetchCounts();
+    const initPort = async () => {
+      if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__?.invoke) {
+        try {
+          const port = await (window as any).__TAURI_INTERNALS__.invoke("get_backend_port");
+          if (port && typeof port === "number") {
+            (window as any).__ACTIVE_BACKEND_PORT__ = port;
+          }
+        } catch {}
+      }
+    };
+    initPort().then(() => fetchCounts());
   }, [location.pathname]);
 
   const fetchCounts = async () => {

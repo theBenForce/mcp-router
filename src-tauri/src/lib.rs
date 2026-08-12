@@ -16,10 +16,8 @@ fn get_backend_port() -> u16 {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init());
-
-    #[cfg(debug_assertions)]
-    let builder = builder.plugin(tauri_plugin_mcp_bridge::init());
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_mcp_bridge::init());
 
     builder
         .manage(SidecarState(Mutex::new(None)))
@@ -32,11 +30,34 @@ pub fn run() {
                 match app.shell().sidecar("backend") {
                     Ok(command) => {
                         match command.spawn() {
-                            Ok((_rx, child)) => {
+                            Ok((mut rx, child)) => {
                                 println!("[Tauri] Successfully spawned Bun backend sidecar process.");
                                 if let Ok(mut guard) = app.state::<SidecarState>().0.lock() {
                                     *guard = Some(child);
                                 }
+
+                                tauri::async_runtime::spawn(async move {
+                                    while let Some(event) = rx.recv().await {
+                                        match event {
+                                            tauri_plugin_shell::process::CommandEvent::Stdout(line) => {
+                                                let text = String::from_utf8_lossy(&line);
+                                                if text.contains("🚀 MCP Router starting on") {
+                                                    if let Some(port_str) = text.split(':').last() {
+                                                        if let Ok(port) = port_str.trim().parse::<u16>() {
+                                                            println!("[Tauri] Detected backend bound to port {}", port);
+                                                            ACTIVE_BACKEND_PORT.store(port, Ordering::Relaxed);
+                                                        }
+                                                    }
+                                                }
+                                                println!("[Backend Stdout] {}", text.trim_end());
+                                            }
+                                            tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
+                                                eprintln!("[Backend Stderr] {}", String::from_utf8_lossy(&line).trim_end());
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                });
                             }
                             Err(err) => {
                                 eprintln!("[Tauri] Failed to spawn Bun backend sidecar: {}", err);

@@ -7,6 +7,20 @@ import { getApiUrl } from "./lib/api";
 
 // Intercept global fetch calls to automatically route relative /api paths to backend port in Tauri desktop mode
 const nativeFetch = window.fetch.bind(window);
+
+async function fetchWithRetry(url: string, init?: RequestInit, retries = 10, delayMs = 200): Promise<Response> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const res = await nativeFetch(url, init);
+      return res;
+    } catch (err) {
+      if (attempt === retries - 1) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return nativeFetch(url, init);
+}
+
 window.fetch = Object.assign(
   function (input: RequestInfo | URL, init?: RequestInit) {
     let urlString: string | null = null;
@@ -20,7 +34,7 @@ window.fetch = Object.assign(
       urlString &&
       (urlString.startsWith("/api") || urlString.startsWith("api/") || urlString.startsWith("/health"))
     ) {
-      return nativeFetch(getApiUrl(urlString), init);
+      return fetchWithRetry(getApiUrl(urlString), init);
     }
     return nativeFetch(input, init);
   },

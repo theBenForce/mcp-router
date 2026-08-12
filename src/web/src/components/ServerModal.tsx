@@ -139,24 +139,44 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   const [headerName, setHeaderName] = useState("X-API-Key");
   const [cliCommand, setCliCommand] = useState("");
   const [scopes, setScopes] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
   const [discoveredScopes, setDiscoveredScopes] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
 
   const fetchDiscoveredScopes = async (endpointUrl: string) => {
     if (!endpointUrl || !endpointUrl.startsWith("http")) return;
     setDiscovering(true);
+    setDiscoveryError(null);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
-      const res = await fetch(getApiUrl(`/api/oauth/discover?url=${encodeURIComponent(endpointUrl)}`));
+      const res = await fetch(
+        getApiUrl(`/api/oauth/discover?url=${encodeURIComponent(endpointUrl)}`),
+        { signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         if (Array.isArray(data.scopes_supported) && data.scopes_supported.length > 0) {
           setDiscoveredScopes(data.scopes_supported);
         } else {
           setDiscoveredScopes([]);
+          setDiscoveryError("No advertised scopes returned by server metadata.");
         }
+      } else {
+        setDiscoveredScopes([]);
+        setDiscoveryError(data.error || "Failed to discover OAuth server scopes");
       }
-    } catch (e) {
+    } catch (e: any) {
+      clearTimeout(timeoutId);
       setDiscoveredScopes([]);
+      if (e.name === "AbortError") {
+        setDiscoveryError("Scope discovery timed out after 10 seconds.");
+      } else {
+        setDiscoveryError(e.message || "Failed to discover scopes");
+      }
     } finally {
       setDiscovering(false);
     }
@@ -283,6 +303,8 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       setCliCommand(authData.command || authData.cliCommand || cfg.authCommand || "");
       const initialScopes = authData.scopes || authData.scope || cfg.scopes || cfg.scope || "";
       setScopes(initialScopes);
+      setClientId(authData.client_id || authData.clientId || "");
+      setClientSecret(authData.client_secret || authData.clientSecret || "");
       if (aType === "bearer") {
         setBearerToken(authData.token || "");
       } else if (aType === "api_key") {
@@ -315,6 +337,8 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       setHeaderName("X-API-Key");
       setCliCommand("");
       setScopes("");
+      setClientId("");
+      setClientSecret("");
     }
     setError(null);
   }, [isOpen, server]);
@@ -407,7 +431,12 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         authData = { command: cliCommand.trim() };
       } else if (authType === "oauth2") {
         const existingAuthData = typeof server?.auth_data === "object" && server.auth_data !== null ? server.auth_data : {};
-        authData = { ...existingAuthData, scopes: scopes.trim() };
+        authData = {
+          ...existingAuthData,
+          scopes: scopes.trim(),
+          ...(clientId.trim() ? { client_id: clientId.trim() } : {}),
+          ...(clientSecret.trim() ? { client_secret: clientSecret.trim() } : {}),
+        };
       }
 
       const endpoint = isEdit ? `/api/servers/${server.id}` : "/api/servers";
@@ -983,7 +1012,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
           )}
 
           {authType === "oauth2" && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <Alert className="bg-indigo-500/10 border-indigo-500/20 text-indigo-300 text-xs">
                 <AlertDescription>
                   <p className="font-semibold">OAuth 2.1 Auto-Discovery Enabled</p>
@@ -992,6 +1021,37 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                   </p>
                 </AlertDescription>
               </Alert>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">
+                    Client ID (Optional)
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Ov23li..."
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    className="bg-zinc-950 border-zinc-800 text-xs font-mono text-zinc-100 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">
+                    Client Secret (Optional)
+                  </label>
+                  <Input
+                    type="password"
+                    placeholder="e.g. secret..."
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                    className="bg-zinc-950 border-zinc-800 text-xs font-mono text-zinc-100 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-zinc-500 -mt-1">
+                Optional. Required for OAuth providers that do not support Dynamic Client Registration (such as GitHub Copilot).
+              </p>
+
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-medium text-zinc-300">
@@ -1009,6 +1069,12 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                     <span>{discovering ? "Discovering..." : "Discover Server Scopes"}</span>
                   </Button>
                 </div>
+
+                {discoveryError && (
+                  <p className="text-[11px] text-rose-400 mb-1.5 font-medium">
+                    ⚠️ {discoveryError}
+                  </p>
+                )}
 
                 {/* Multi-Select Tag Input Box */}
                 <div
