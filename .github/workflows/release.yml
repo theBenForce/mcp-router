@@ -69,7 +69,7 @@ jobs:
         id: semantic
         uses: cycjimmy/semantic-release-action@v4
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
 
   build-macos:
     name: Build macOS Apple Silicon DMG
@@ -98,6 +98,12 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Sync Version to Tag
+        run: |
+          TAG="${{ needs.semantic-release.outputs.new_release_git_tag }}"
+          VERSION="${TAG#v}"
+          bun scripts/sync-version.ts "$VERSION"
+
       - name: Install root dependencies
         run: bun install --frozen-lockfile
 
@@ -107,7 +113,25 @@ jobs:
       - name: Create sidecar binary directory
         run: mkdir -p src-tauri/bin
 
+      - name: Import Apple Signing Certificate (if configured)
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $RUNNER_TEMP/certificate.p12
+          security create-keychain -p "buildkeychain" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "buildkeychain" $KEYCHAIN_PATH
+          security import $RUNNER_TEMP/certificate.p12 -k $KEYCHAIN_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "buildkeychain" $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+          security list-keychains -s $KEYCHAIN_PATH
+
       - name: Build Desktop App (macOS Apple Silicon DMG)
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || 'Apple Development: benforce@gmail.com (4NJVFBXFZV)' }}
         run: bun run build:desktop
 
       - name: Verify DMG asset exists
@@ -118,5 +142,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ needs.semantic-release.outputs.new_release_git_tag }}"
-          echo "Uploading DMG asset to GitHub release ${TAG}..."
-          gh release upload "${TAG}" src-tauri/target/release/bundle/dmg/*.dmg --clobber
+          DMG_PATH=$(find src-tauri/target -name "*.dmg" | head -n 1)
+          if [ -z "$DMG_PATH" ]; then
+            echo "Error: No DMG file found in src-tauri/target"
+            exit 1
+          fi
+          echo "Uploading DMG asset $DMG_PATH to GitHub release ${TAG}..."
+          gh release upload "${TAG}" "$DMG_PATH" --clobber
