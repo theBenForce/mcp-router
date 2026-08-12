@@ -37,6 +37,27 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): 
   });
 }
 
+export function normalizeStdioCommand(rawCommand: string, rawArgs: string[] = []): { command: string; args: string[] } {
+  let trimmedCmd = (rawCommand || "").trim();
+  let args = [...(rawArgs || [])];
+
+  if (trimmedCmd.includes(" ")) {
+    const parts = trimmedCmd.split(/\s+/).filter(Boolean);
+    trimmedCmd = parts[0];
+    args = [...parts.slice(1), ...args];
+  }
+
+  if (/\.(js|mjs|cjs)$/i.test(trimmedCmd)) {
+    args = [trimmedCmd, ...args];
+    trimmedCmd = "node";
+  } else if (/\.ts$/i.test(trimmedCmd)) {
+    args = [trimmedCmd, ...args];
+    trimmedCmd = "bun";
+  }
+
+  return { command: trimmedCmd, args };
+}
+
 export class UpstreamConnectionManager {
   private activeConnections: Map<string, ActiveServerConnection> = new Map();
 
@@ -73,15 +94,16 @@ export class UpstreamConnectionManager {
       let stopSidecar: (() => Promise<void>) | undefined;
 
       if (server.transportType === "stdio" && !config.useDocker) {
-        console.log(`[UpstreamManager] Spawning native host stdio transport for ${serverId}: ${config.command} ${(config.args || []).join(" ")}`);
+        const normalized = normalizeStdioCommand(config.command || "node", config.args || []);
+        console.log(`[UpstreamManager] Spawning native host stdio transport for ${serverId}: ${normalized.command} ${normalized.args.join(" ")}`);
         const envVars = {
           ...process.env,
           ...(config.env || {}),
           ...authHeaders,
         };
         transport = new StdioClientTransport({
-          command: config.command,
-          args: config.args || [],
+          command: normalized.command,
+          args: normalized.args,
           env: envVars,
         });
       } else if (server.transportType === "docker" || (server.transportType === "stdio" && config.useDocker)) {

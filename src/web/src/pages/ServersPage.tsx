@@ -8,6 +8,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "..
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const ACTION_BADGES: Record<string, { label: string; bg: string; text: string; border: string; icon: any }> = {
   read: { label: "READ", bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/20", icon: Eye },
@@ -25,8 +26,16 @@ export const ServersPage: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [deletingServerId, setDeletingServerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("oauth_error");
+    if (err) {
+      setOauthError(err);
+      // Clean up query param from address bar without reloading
+      window.history.replaceState({}, "", window.location.pathname);
+    }
     loadServers();
   }, []);
 
@@ -122,6 +131,23 @@ export const ServersPage: React.FC = () => {
           <span>Add MCP Server</span>
         </Button>
       </div>
+
+      {oauthError && (
+        <Alert variant="destructive" className="bg-rose-500/10 border-rose-500/30 text-rose-300 font-mono text-xs flex items-center justify-between p-3">
+          <AlertDescription className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+            <span>OAuth Authorization Warning: {oauthError}</span>
+          </AlertDescription>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setOauthError(null)}
+            className="h-6 px-2 text-xs text-rose-400 hover:text-rose-200 hover:bg-rose-500/20"
+          >
+            Dismiss
+          </Button>
+        </Alert>
+      )}
 
       {/* Grid: Server List on Left, Selected Server Detail on Right */}
       <div className="grid grid-cols-12 gap-6">

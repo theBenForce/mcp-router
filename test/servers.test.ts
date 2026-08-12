@@ -269,5 +269,21 @@ describe("Servers & Tools API", () => {
     expect(authResult.exitCode).toBe(0);
     expect(authResult.output).toContain("Auth command executed successfully");
   });
+
+  test("normalizeStdioCommand parses executable and args cleanly", async () => {
+    const { normalizeStdioCommand } = await import("../src/mcp/upstream/manager");
+    
+    const res1 = normalizeStdioCommand("node /path/to/dist/index.js");
+    expect(res1.command).toBe("node");
+    expect(res1.args).toEqual(["/path/to/dist/index.js"]);
+
+    const res2 = normalizeStdioCommand("/path/to/dist/index.js");
+    expect(res2.command).toBe("node");
+    expect(res2.args).toEqual(["/path/to/dist/index.js"]);
+
+    const res3 = normalizeStdioCommand("npx", ["-y", "@mcp/server"]);
+    expect(res3.command).toBe("npx");
+    expect(res3.args).toEqual(["-y", "@mcp/server"]);
+  });
 });
 
