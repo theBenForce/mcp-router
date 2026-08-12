@@ -123,7 +123,7 @@ jobs:
             exit 0
           fi
           KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
-          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $RUNNER_TEMP/certificate.p12
+          echo "$APPLE_CERTIFICATE" | base64 -d > $RUNNER_TEMP/certificate.p12
           security create-keychain -p "buildkeychain" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "buildkeychain" $KEYCHAIN_PATH
