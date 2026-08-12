@@ -131,7 +131,7 @@ jobs:
 
       - name: Build Desktop App (macOS Apple Silicon DMG)
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || 'Apple Development: benforce@gmail.com (4NJVFBXFZV)' }}
+          APPLE_SIGNING_IDENTITY: "${{ secrets.APPLE_SIGNING_IDENTITY || 'Apple Development: benforce@gmail.com (4NJVFBXFZV)' }}"
         run: bun run build:desktop
 
       - name: Verify DMG asset exists
