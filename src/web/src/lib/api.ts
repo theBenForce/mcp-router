@@ -4,15 +4,17 @@
  * prepends http://localhost:5170 to relative /api paths.
  */
 export function getApiUrl(path: string): string {
+  if (typeof window === "undefined") return path;
+
   const isTauri =
-    typeof window !== "undefined" &&
-    (Boolean((window as any).__TAURI__) ||
-      Boolean((window as any).__TAURI_INTERNALS__) ||
-      window.location.protocol === "tauri:" ||
-      window.location.hostname === "tauri.localhost");
+    Boolean((window as any).__TAURI__) ||
+    Boolean((window as any).__TAURI_INTERNALS__) ||
+    window.location.protocol === "tauri:" ||
+    window.location.hostname === "tauri.localhost" ||
+    window.location.origin.includes("tauri");
 
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  if (isTauri) {
+  if (isTauri && (normalizedPath.startsWith("/api") || normalizedPath.startsWith("/health"))) {
     return `http://localhost:5170${normalizedPath}`;
   }
   return normalizedPath;

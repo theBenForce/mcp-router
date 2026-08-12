@@ -6,13 +6,21 @@ import "./index.css";
 import { getApiUrl } from "./lib/api";
 
 // Intercept global fetch calls to automatically route relative /api paths to backend port in Tauri desktop mode
-const nativeFetch = window.fetch;
+const nativeFetch = window.fetch.bind(window);
 window.fetch = Object.assign(
   function (input: RequestInfo | URL, init?: RequestInit) {
-    if (typeof input === "string" && (input.startsWith("/") || input.startsWith("api/"))) {
-      return nativeFetch(getApiUrl(input), init);
-    } else if (input instanceof URL && (input.pathname.startsWith("/") || input.pathname.startsWith("api/"))) {
-      return nativeFetch(getApiUrl(input.pathname + input.search), init);
+    let urlString: string | null = null;
+    if (typeof input === "string") {
+      urlString = input;
+    } else if (input instanceof URL) {
+      urlString = input.pathname + input.search;
+    }
+
+    if (
+      urlString &&
+      (urlString.startsWith("/api") || urlString.startsWith("api/") || urlString.startsWith("/health"))
+    ) {
+      return nativeFetch(getApiUrl(urlString), init);
     }
     return nativeFetch(input, init);
   },
