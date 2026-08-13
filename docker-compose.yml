@@ -6,18 +6,47 @@ services:
     image: mcp-router:latest
     container_name: mcp-router
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64M
     ports:
-      - "5170:5170"
+      - "127.0.0.1:5170:5170"
     volumes:
-      - ./data:/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./data:/data:rw
     environment:
       - PORT=5170
       - HOST=0.0.0.0
       - AUTH_MODE=docker
       - DATA_DIR=/data
       - DATABASE_PATH=/data/mcp_router.db
-      - SESSION_SECRET=${SESSION_SECRET:-changeme_super_secret_session_key}
+      - DOCKER_HOST=tcp://docker-proxy:2375
+      - SESSION_SECRET=${SESSION_SECRET:?Error: SESSION_SECRET environment variable is required}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    depends_on:
+      - docker-proxy
+
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:3
+    container_name: mcp-docker-proxy
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1
+      - POST=1
+      - IMAGES=1
+      - INFO=1
+      - PING=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
