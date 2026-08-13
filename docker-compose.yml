@@ -3,14 +3,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: mcp-router:latest
     container_name: mcp-router
     restart: unless-stopped
     ports:
       - "5170:5170"
     volumes:
       - ./data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - PORT=5170
       - HOST=0.0.0.0
+      - AUTH_MODE=docker
+      - DATA_DIR=/data
       - DATABASE_PATH=/data/mcp_router.db
+      - SESSION_SECRET=${SESSION_SECRET:-changeme_super_secret_session_key}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+    security_opt:
+      - no-new-privileges:true
