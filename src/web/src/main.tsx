@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 import { getApiUrl } from "./lib/api";
+import { BackendProvider } from "./lib/BackendContext";
 
 // Intercept global fetch calls to automatically route relative /api paths to backend port in Tauri desktop mode
 const nativeFetch = window.fetch.bind(window);
@@ -44,7 +45,9 @@ window.fetch = Object.assign(
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <BackendProvider>
+        <App />
+      </BackendProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

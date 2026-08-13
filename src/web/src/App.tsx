@@ -6,9 +6,12 @@ import { ServersPage } from "./pages/ServersPage";
 import { PromptsPage } from "./pages/PromptsPage";
 import { KeysPage } from "./pages/KeysPage";
 import { AuditPage } from "./pages/AuditPage";
+import { LoginPage } from "./components/LoginPage";
+import { useBackend } from "./lib/BackendContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export const App: React.FC = () => {
+  const { isAuthenticated, isLoading } = useBackend();
   const [serverCount, setServerCount] = useState(0);
   const [promptCount, setPromptCount] = useState(0);
   const [keyCount, setKeyCount] = useState(0);
@@ -25,8 +28,10 @@ export const App: React.FC = () => {
         } catch {}
       }
     };
-    initPort().then(() => fetchCounts());
-  }, [location.pathname]);
+    if (isAuthenticated) {
+      initPort().then(() => fetchCounts());
+    }
+  }, [location.pathname, isAuthenticated]);
 
   const fetchCounts = async () => {
     try {
@@ -36,13 +41,25 @@ export const App: React.FC = () => {
         fetch("/api/keys"),
       ]);
       const [sData, pData, kData] = await Promise.all([sRes.json(), pRes.json(), kRes.json()]);
-      setServerCount(sData.length);
-      setPromptCount(pData.length);
-      setKeyCount(kData.length);
+      if (Array.isArray(sData)) setServerCount(sData.length);
+      if (Array.isArray(pData)) setPromptCount(pData.length);
+      if (Array.isArray(kData)) setKeyCount(kData.length);
     } catch (e) {
       console.error("Failed to fetch sidebar counts:", e);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm">
+        Loading MCP Router...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   return (
     <TooltipProvider>
