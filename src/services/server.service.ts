@@ -208,7 +208,7 @@ export class ServerService {
     return true;
   }
 
-  async runAuthCommand(id: string, customCommand?: string) {
+  async runAuthCommand(id: string) {
     const server = this.getServer(id);
     if (!server) {
       throw new Error(`Server with id ${id} not found`);
@@ -216,24 +216,60 @@ export class ServerService {
 
     const authData = server.auth_data || {};
     const config = server.config || {};
-    const cmdToRun = customCommand || authData.command || authData.cliCommand || config.authCommand;
+    const cmdToRun = authData.command || authData.cliCommand || config.authCommand;
 
     if (!cmdToRun || typeof cmdToRun !== "string" || !cmdToRun.trim()) {
       throw new Error(`No CLI Auth Command configured for server "${server.name}"`);
     }
 
-    const { exec } = await import("node:child_process");
+    const { spawn } = await import("node:child_process");
+    const { parse } = await import("shell-quote");
+
+    const parsedTokens = parse(cmdToRun);
+    const args: string[] = [];
+    let executable = "";
+
+    for (const token of parsedTokens) {
+      if (typeof token === "string") {
+        if (!executable) {
+          executable = token;
+        } else {
+          args.push(token);
+        }
+      }
+    }
+
+    if (!executable) {
+      throw new Error(`Invalid CLI Auth Command configured for server "${server.name}"`);
+    }
 
     return new Promise<{ success: boolean; exitCode: number; output: string; error?: string }>((resolve) => {
-      console.log(`[ServerService] Running auth command for ${server.name} (${id}): ${cmdToRun}`);
+      console.log(`[ServerService] Running auth command for ${server.name} (${id}): ${executable} ${args.join(" ")}`);
 
-      const child = exec(cmdToRun, {
+      const stdoutChunks: string[] = [];
+      const stderrChunks: string[] = [];
+
+      const child = spawn(executable, args, {
         timeout: 60000,
         env: { ...process.env, ...(config.env || {}) },
-      }, async (error, stdout, stderr) => {
-        const output = [stdout, stderr].filter(Boolean).join("\n").trim();
-        const exitCode = error ? ((error as any).code ?? 1) : 0;
+      });
+
+      child.stdout?.on("data", (data) => stdoutChunks.push(data.toString()));
+      child.stderr?.on("data", (data) => stderrChunks.push(data.toString()));
+
+      child.on("error", (err) => {
+        resolve({
+          success: false,
+          exitCode: 1,
+          output: [stdoutChunks.join(""), stderrChunks.join("")].filter(Boolean).join("\n").trim() || err.message,
+          error: err.message,
+        });
+      });
+
+      child.on("close", (code) => {
+        const exitCode = code ?? 0;
         const success = exitCode === 0;
+        const output = [stdoutChunks.join(""), stderrChunks.join("")].filter(Boolean).join("\n").trim();
 
         if (success) {
           console.log(`[ServerService] Auth command succeeded for ${id}, triggering reconnect...`);
@@ -244,9 +280,8 @@ export class ServerService {
 
         resolve({
           success,
-          exitCode: typeof exitCode === "number" ? exitCode : 1,
+          exitCode,
           output: output || (success ? "Command completed with no output." : "Command failed."),
-          error: error ? error.message : undefined,
         });
       });
     });

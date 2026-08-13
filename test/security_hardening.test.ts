@@ -94,4 +94,25 @@ describe("Security Hardening Features", () => {
       expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
     });
   });
+
+  describe("CLI Auth Shell Injection Safety", () => {
+    test("runAuthCommand executes configured command without shell metacharacter expansion", async () => {
+      const { serverService } = await import("../src/services/server.service");
+      const created = await serverService.createServer({
+        name: "security-auth-test-server",
+        transportType: "stdio",
+        config: { command: "node", args: ["-e", "console.log('test')"] },
+        authType: "cli_command",
+        authData: { command: "echo hello; echo injected" },
+      });
+
+      const res = await serverService.runAuthCommand(created!.id);
+      expect(res.success).toBe(true);
+      // Because shell-quote isolates operators like ';' out of string tokens,
+      // it passes "hello", "echo", "injected" as literal arguments to echo instead of executing multiple shell statements
+      expect(res.output).toBe("hello echo injected");
+
+      await serverService.deleteServer(created!.id);
+    });
+  });
 });
