@@ -1,4 +1,4 @@
-import type { BackendAdapter, BackendAdapterOptions, ServerConfig, User, AuthStatus } from "./types";
+import type { BackendAdapter, BackendAdapterOptions, ServerConfig, User, AuthStatus, ToolDefinition, PromptDefinition, AuditLogEntry } from "./types";
 
 export class HttpAdapter implements BackendAdapter {
   protected baseUrl: string;
@@ -68,16 +68,16 @@ export class HttpAdapter implements BackendAdapter {
     await this.request(`/servers/${id}`, { method: "DELETE" });
   }
 
-  async getTools(): Promise<any[]> {
-    return this.request<any[]>("/tools");
+  async getTools(): Promise<ToolDefinition[]> {
+    return this.request<ToolDefinition[]>("/tools");
   }
 
-  async getPrompts(): Promise<any[]> {
-    return this.request<any[]>("/prompts");
+  async getPrompts(): Promise<PromptDefinition[]> {
+    return this.request<PromptDefinition[]>("/prompts");
   }
 
-  async getLogs(limit = 100): Promise<any[]> {
-    return this.request<any[]>(`/audit?limit=${limit}`);
+  async getLogs(limit = 100): Promise<AuditLogEntry[]> {
+    return this.request<AuditLogEntry[]>(`/audit?limit=${limit}`);
   }
 
   async login(username: string, password: string): Promise<{ token: string; user: User }> {
