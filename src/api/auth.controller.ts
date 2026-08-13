@@ -3,6 +3,27 @@ import { setCookie, deleteCookie } from "hono/cookie";
 import { authenticateUser } from "../services/auth.service";
 import { createJwtToken } from "../security/jwt";
 
+import type { Context } from "hono";
+
+export function getSessionCookieOptions(c: Context) {
+  const isHttps =
+    c.req.header("x-forwarded-proto") === "https" ||
+    c.req.url.startsWith("https://");
+  const isProd = process.env.NODE_ENV === "production";
+  const secure =
+    process.env.COOKIE_SECURE !== undefined
+      ? process.env.COOKIE_SECURE === "true"
+      : isHttps || isProd;
+
+  return {
+    httpOnly: true,
+    path: "/",
+    sameSite: "Lax" as const,
+    secure,
+    maxAge: 7 * 24 * 60 * 60, // 7 days
+  };
+}
+
 const authController = new Hono();
 
 authController.post("/login", async (c) => {
@@ -25,12 +46,8 @@ authController.post("/login", async (c) => {
       role: user.role,
     });
 
-    setCookie(c, "mcp_session", token, {
-      httpOnly: true,
-      path: "/",
-      sameSite: "Lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-    });
+    const cookieOpts = getSessionCookieOptions(c);
+    setCookie(c, "mcp_session", token, cookieOpts);
 
     return c.json({
       token,
@@ -42,7 +59,8 @@ authController.post("/login", async (c) => {
 });
 
 authController.post("/logout", (c) => {
-  deleteCookie(c, "mcp_session", { path: "/" });
+  const cookieOpts = getSessionCookieOptions(c);
+  deleteCookie(c, "mcp_session", { path: cookieOpts.path, secure: cookieOpts.secure });
   return c.json({ success: true });
 });
 
