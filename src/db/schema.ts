@@ -36,12 +36,45 @@ export const mcpTools = sqliteTable("mcp_tools", {
   uniqueIndex("uq_tools_server_name").on(table.serverId, table.name),
 ]);
 
+// Users Table
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash"),
+  role: text("role", { enum: ["admin", "user"] }).notNull().default("user"),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+});
+
+// Web UI Sessions Table
+export const sessions = sqliteTable("sessions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+}, (table) => [
+  index("idx_sessions_user").on(table.userId),
+]);
+
+// OAuth 2.0 Clients
+export const oauthClients = sqliteTable("oauth_clients", {
+  id: text("id").primaryKey(),
+  clientId: text("client_id").notNull().unique(),
+  clientSecretHash: text("client_secret_hash").notNull(),
+  name: text("name").notNull(),
+  redirectUris: text("redirect_uris").notNull(),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+}, (table) => [
+  index("idx_oauth_clients_user").on(table.userId),
+]);
+
 // Downstream API Keys
 export const apiKeys = sqliteTable("api_keys", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   keyPrefix: text("key_prefix").notNull(),
   keyHash: text("key_hash").notNull().unique(),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
   isActive: integer("is_active").notNull().default(1),
   expiresAt: text("expires_at"),
   lastUsedAt: text("last_used_at"),
