@@ -1,16 +1,25 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "pipeline": {
+  "tasks": {
+    "build:web": {
+      "outputs": ["src/web/dist/**"]
+    },
+    "build:backend": {
+      "outputs": ["src-tauri/bin/**"]
+    },
+    "build:desktop": {
+      "dependsOn": ["build:web", "build:backend"],
+      "outputs": ["src-tauri/target/release/bundle/**"]
+    },
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", "build/**", "src-tauri/target/**"]
+      "dependsOn": ["build:desktop"]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["build:web", "build:backend"]
     },
     "clean": {
       "cache": false
