@@ -13,6 +13,9 @@ import auditController from "./api/audit.controller";
 import promptsController from "./api/prompts.controller";
 import oauthController from "./api/oauth.controller";
 import configController from "./api/config.controller";
+import authController from "./api/auth.controller";
+import { authMiddleware } from "./middleware/auth";
+import { ensureAdminUserOnStartup } from "./services/auth.service";
 import downstreamHandler from "./mcp/downstream/handler";
 import { upstreamManager } from "./mcp/upstream/manager";
 
@@ -29,6 +32,12 @@ app.get("/health", (c) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Auth Controller
+app.route("/api/auth", authController);
+
+// Auth Middleware for all management API endpoints
+app.use("/api/*", authMiddleware);
 
 // Management REST API Routes
 app.route("/api/servers", serversController);
@@ -54,6 +63,11 @@ if (fs.existsSync(staticDir)) {
 
 // Initialize DB on server start
 getDb();
+
+// Ensure default admin user is initialized on startup
+ensureAdminUserOnStartup().catch((err) => {
+  console.error("[Startup] Admin user initialization failed:", err);
+});
 
 // Reconnect servers and refresh tool definitions on startup
 upstreamManager.reconnectAll().catch((err) => {
