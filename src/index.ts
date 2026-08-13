@@ -33,13 +33,11 @@ app.get("/health", (c) => {
   });
 });
 
-// Auth Controller
-app.route("/api/auth", authController);
-
 // Auth Middleware for all management API endpoints
 app.use("/api/*", authMiddleware);
 
-// Management REST API Routes
+// Auth Controller & Management REST API Routes
+app.route("/api/auth", authController);
 app.route("/api/servers", serversController);
 app.route("/api/tools", toolsController);
 app.route("/api/keys", keysController);
