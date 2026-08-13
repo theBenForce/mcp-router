@@ -310,6 +310,10 @@ describe("Servers & Tools API", () => {
     const res3 = normalizeStdioCommand("npx", ["-y", "@mcp/server"]);
     expect(res3.command).toBe("npx");
     expect(res3.args).toEqual(["-y", "@mcp/server"]);
+
+    const res4 = normalizeStdioCommand("'/Program Files/node' '/My Projects/server.js'");
+    expect(res4.command).toBe("/Program Files/node");
+    expect(res4.args).toEqual(["/My Projects/server.js"]);
   });
 });
 

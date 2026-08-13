@@ -165,17 +165,7 @@ app.post("/:id/disconnect", async (c) => {
 app.post("/:id/auth", async (c) => {
   const id = c.req.param("id");
   try {
-    let customCommand: string | undefined;
-    try {
-      const body = await c.req.json();
-      if (body && typeof body.command === "string") {
-        customCommand = body.command;
-      }
-    } catch {
-      // Body may be empty
-    }
-
-    const result = await serverService.runAuthCommand(id, customCommand);
+    const result = await serverService.runAuthCommand(id);
     const updatedServer = serverService.getServer(id);
 
     return c.json({

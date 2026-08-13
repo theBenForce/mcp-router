@@ -23,15 +23,54 @@ export interface BackendAdapterOptions {
   fetchImpl?: typeof fetch;
 }
 
+export interface ToolDefinition {
+  id: string;
+  server_id: string;
+  name: string;
+  namespaced_name: string;
+  description?: string;
+  input_schema_json: string;
+  action_type: "read" | "write" | "delete" | "execute";
+  created_at: string;
+}
+
+export interface PromptArgumentDefinition {
+  name: string;
+  description?: string;
+  required?: boolean;
+}
+
+export interface PromptDefinition {
+  id: string;
+  name: string;
+  title?: string;
+  description?: string;
+  content_template: string;
+  arguments: PromptArgumentDefinition[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  api_key_id?: string | null;
+  server_id?: string | null;
+  tool_name: string;
+  status: "allowed" | "denied" | "error" | "success";
+  duration_ms?: number | null;
+  error_message?: string | null;
+  created_at: string;
+}
+
 export interface BackendAdapter {
   getServers(): Promise<ServerConfig[]>;
   addServer(server: Partial<ServerConfig>): Promise<ServerConfig>;
   updateServer(id: string, server: Partial<ServerConfig>): Promise<ServerConfig>;
   deleteServer(id: string): Promise<void>;
 
-  getTools(): Promise<any[]>;
-  getPrompts(): Promise<any[]>;
-  getLogs(limit?: number): Promise<any[]>;
+  getTools(): Promise<ToolDefinition[]>;
+  getPrompts(): Promise<PromptDefinition[]>;
+  getLogs(limit?: number): Promise<AuditLogEntry[]>;
 
   login(username: string, password: string): Promise<{ token: string; user: User }>;
   logout(): Promise<void>;

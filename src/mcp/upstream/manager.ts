@@ -13,6 +13,7 @@ import { parseDockerCommand } from "./docker-parser";
 import { sidecarManager } from "./sidecar";
 import { hostProcessManager } from "./host";
 import { classifyToolAction } from "./classifier";
+import { parse as parseShellQuote } from "shell-quote";
 import { serverLogStore } from "./logger";
 import { serverEvents } from "./events";
 
@@ -41,24 +42,27 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): 
 }
 
 export function normalizeStdioCommand(rawCommand: string, rawArgs: string[] = []): { command: string; args: string[] } {
-  let trimmedCmd = (rawCommand || "").trim();
+  const trimmedCmd = (rawCommand || "").trim();
   let args = [...(rawArgs || [])];
+  let command = trimmedCmd;
 
-  if (trimmedCmd.includes(" ")) {
-    const parts = trimmedCmd.split(/\s+/).filter(Boolean);
-    trimmedCmd = parts[0];
-    args = [...parts.slice(1), ...args];
+  if (trimmedCmd) {
+    const tokens = parseShellQuote(trimmedCmd).filter((t): t is string => typeof t === "string");
+    if (tokens.length > 0) {
+      command = tokens[0];
+      args = [...tokens.slice(1), ...args];
+    }
   }
 
-  if (/\.(js|mjs|cjs)$/i.test(trimmedCmd)) {
-    args = [trimmedCmd, ...args];
-    trimmedCmd = "node";
-  } else if (/\.ts$/i.test(trimmedCmd)) {
-    args = [trimmedCmd, ...args];
-    trimmedCmd = "bun";
+  if (/\.(js|mjs|cjs)$/i.test(command)) {
+    args = [command, ...args];
+    command = "node";
+  } else if (/\.ts$/i.test(command)) {
+    args = [command, ...args];
+    command = "bun";
   }
 
-  return { command: trimmedCmd, args };
+  return { command, args };
 }
 
 export class UpstreamConnectionManager {
@@ -378,7 +382,7 @@ export class UpstreamConnectionManager {
     }
   }
 
-  async reconnectAll(): Promise<void> {
+  async reconnectAll(concurrency = 3): Promise<void> {
     const db = getDb();
     const servers = db
       .select({ id: mcpServers.id })
@@ -386,13 +390,16 @@ export class UpstreamConnectionManager {
       .where(ne(mcpServers.status, "need_auth"))
       .all();
 
-    await Promise.allSettled(
-      servers.map((server) =>
-        this.connectServer(server.id).catch((err: any) => {
-          console.error(`[UpstreamManager] Reconnect failed for ${server.id}:`, err?.message || err);
-        })
-      )
-    );
+    for (let i = 0; i < servers.length; i += concurrency) {
+      const chunk = servers.slice(i, i + concurrency);
+      await Promise.allSettled(
+        chunk.map((server) =>
+          this.connectServer(server.id).catch((err: any) => {
+            console.error(`[UpstreamManager] Reconnect failed for ${server.id}:`, err?.message || err);
+          })
+        )
+      );
+    }
   }
 
   async disconnectAll(): Promise<void> {
@@ -408,10 +415,3 @@ export class UpstreamConnectionManager {
 }
 
 export const upstreamManager = new UpstreamConnectionManager();
-
-process.on("SIGINT", async () => {
-  await upstreamManager.disconnectAll();
-});
-process.on("SIGTERM", async () => {
-  await upstreamManager.disconnectAll();
-});

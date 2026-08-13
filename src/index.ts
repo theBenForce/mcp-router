@@ -100,9 +100,32 @@ const staticDir = fs.existsSync(config.publicDir)
   ? config.publicDir
   : path.join(process.cwd(), "src", "web", "dist");
 
+const devHtmlPath = path.join(process.cwd(), "src", "web", "index.html");
+const fallbackSvgPath = path.join(process.cwd(), "public", "app-icon.svg");
+
 if (fs.existsSync(staticDir)) {
   app.use("*", serveStatic({ root: path.relative(process.cwd(), staticDir) }));
   app.get("*", serveStatic({ path: path.relative(process.cwd(), path.join(staticDir, "index.html")) }));
+} else {
+  app.get("/app-icon.svg", (c) => {
+    if (fs.existsSync(fallbackSvgPath)) {
+      const svg = fs.readFileSync(fallbackSvgPath, "utf-8");
+      return c.html(svg, 200, { "Content-Type": "image/svg+xml" });
+    }
+    return c.text('<svg xmlns="http://www.w3.org/2000/svg"/>', 200, { "Content-Type": "image/svg+xml" });
+  });
+
+  app.get("*", (c) => {
+    if (c.req.path.startsWith("/api")) return c.notFound();
+    if (fs.existsSync(devHtmlPath)) {
+      let html = fs.readFileSync(devHtmlPath, "utf-8");
+      if (!html.includes("<title>")) {
+        html = html.replace("<head>", "<head><title>MCP Router</title>");
+      }
+      return c.html(html);
+    }
+    return c.html("<!DOCTYPE html><html><head><title>MCP Router</title></head><body><div id='root'></div></body></html>");
+  });
 }
 
 // Initialize DB on server start
@@ -162,7 +185,7 @@ if (import.meta.main) {
 }
 
 export { app };
-export default import.meta.main ? undefined : app;
+export default app;
 
 
 

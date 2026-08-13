@@ -24,6 +24,15 @@ function createTimeoutFetch(timeoutMs = 10000) {
   };
 }
 
+function escapeHtml(str: string): string {
+  return (str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function renderOAuthResultHtml(options: {
   success: boolean;
   title: string;
@@ -36,22 +45,24 @@ function renderOAuthResultHtml(options: {
     ? `<svg class="w-12 h-12 text-emerald-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>`
     : `<svg class="w-12 h-12 text-rose-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`;
 
-  const escapedDetail = detail ? detail.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+  const safeTitle = escapeHtml(title);
+  const safeMessage = escapeHtml(message);
+  const safeDetail = detail ? escapeHtml(detail) : "";
 
   return `<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} - MCP Router</title>
+  <title>${safeTitle} - MCP Router</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-zinc-950 text-zinc-100 flex items-center justify-center min-h-screen p-4 font-sans">
   <div class="max-w-md w-full bg-zinc-900/90 border border-zinc-800 rounded-2xl p-6 text-center shadow-2xl backdrop-blur-xl space-y-4">
     ${iconSvg}
-    <h1 class="text-xl font-bold ${success ? "text-emerald-400" : "text-rose-400"}">${title}</h1>
-    <p class="text-sm text-zinc-300">${message}</p>
-    ${escapedDetail ? `<div class="p-3 bg-zinc-950/80 border border-zinc-800 rounded-lg text-xs text-zinc-400 font-mono text-left break-all">${escapedDetail}</div>` : ""}
+    <h1 class="text-xl font-bold ${success ? "text-emerald-400" : "text-rose-400"}">${safeTitle}</h1>
+    <p class="text-sm text-zinc-300">${safeMessage}</p>
+    ${safeDetail ? `<div class="p-3 bg-zinc-950/80 border border-zinc-800 rounded-lg text-xs text-zinc-400 font-mono text-left break-all">${safeDetail}</div>` : ""}
     <div class="pt-2 flex flex-col gap-2">
       <button onclick="closeOrRedirect()" class="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg text-sm transition-colors shadow-lg shadow-indigo-600/20 cursor-pointer">
         Close Window
