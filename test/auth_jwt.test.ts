@@ -7,16 +7,25 @@ import { config } from "../src/config";
 import { eq } from "drizzle-orm";
 
 describe("JWT Auth Endpoints & Middleware", () => {
+  const origAuthModeEnv = process.env.AUTH_MODE;
+  const origAuthModeConfig = config.authMode;
+
   beforeEach(async () => {
     process.env.DATABASE_PATH = ":memory:";
     process.env.AUTH_MODE = "docker";
+    config.authMode = "docker";
     process.env.SESSION_SECRET = "test_session_secret_key_12345";
     closeDb();
     getDb();
   });
 
   afterEach(() => {
-    delete process.env.AUTH_MODE;
+    if (origAuthModeEnv !== undefined) {
+      process.env.AUTH_MODE = origAuthModeEnv;
+    } else {
+      delete process.env.AUTH_MODE;
+    }
+    config.authMode = origAuthModeConfig;
     closeDb();
   });
 
