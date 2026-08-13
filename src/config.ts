@@ -8,6 +8,9 @@ export interface AppConfig {
   databasePath: string;
   publicDir: string;
   isDev: boolean;
+  authMode: "docker" | "desktop";
+  sessionSecret: string;
+  adminPassword?: string;
 }
 
 export function getDataDir(): string {
@@ -106,5 +109,8 @@ export const config: AppConfig = {
     (process.env.NODE_ENV === "test" ? ":memory:" : path.join(dataDir, "mcp_router.db")),
   publicDir: process.env.PUBLIC_DIR || path.join(process.cwd(), "public"),
   isDev: process.env.NODE_ENV !== "production",
+  authMode: (process.env.AUTH_MODE as "docker" | "desktop") || "desktop",
+  sessionSecret: process.env.SESSION_SECRET || "mcp_router_default_session_secret_32_chars_long",
+  adminPassword: process.env.ADMIN_PASSWORD,
 };
 

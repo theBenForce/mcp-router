@@ -67,6 +67,31 @@ export function closeDb(): void {
 function pushSchema(db: Database) {
   try { db.exec("PRAGMA foreign_keys = OFF;"); } catch {}
   db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT,
+      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('admin', 'user')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS oauth_clients (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL UNIQUE,
+      client_secret_hash TEXT NOT NULL,
+      name TEXT NOT NULL,
+      redirect_uris TEXT NOT NULL,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS mcp_servers (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
@@ -157,6 +182,8 @@ function pushSchema(db: Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_oauth_clients_user ON oauth_clients(user_id);
     CREATE INDEX IF NOT EXISTS idx_tools_server ON mcp_tools(server_id);
     CREATE INDEX IF NOT EXISTS idx_perms_key ON api_key_permissions(api_key_id);
     CREATE INDEX IF NOT EXISTS idx_perms_server ON api_key_permissions(server_id);
@@ -164,6 +191,13 @@ function pushSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_logs(api_key_id);
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
   `);
+
+  // Migration: add user_id column to api_keys if missing
+  try {
+    db.exec("ALTER TABLE api_keys ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE");
+  } catch {
+    // Column already exists or error
+  }
 
   // Migration: add action_type column to mcp_tools if missing
   try {
