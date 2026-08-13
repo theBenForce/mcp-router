@@ -2,9 +2,9 @@
 
 # Stage 1: Build Frontend SPA
 FROM oven/bun:alpine AS web-builder
-WORKDIR /app/web
-COPY src/web/package.json ./
-COPY package.json ./
+WORKDIR /app
+COPY package.json bun.lock* ./
+COPY src/web/package.json ./src/web/
 RUN bun install
 COPY src/web ./src/web
 COPY src/lib ./src/lib
@@ -14,6 +14,7 @@ RUN cd src/web && bun run build
 FROM oven/bun:alpine AS backend-deps
 WORKDIR /app
 COPY package.json bun.lock* ./
+COPY src/web/package.json ./src/web/
 RUN bun install --production
 
 # Stage 3: Production Runtime
@@ -44,7 +45,5 @@ ENV AUTH_MODE=docker
 ENV DATA_DIR=/data
 ENV DATABASE_PATH=/data/mcp_router.db
 ENV PUBLIC_DIR=/app/public
-ENV SESSION_SECRET=""
-ENV ADMIN_PASSWORD=""
 
 CMD ["bun", "src/index.ts"]
