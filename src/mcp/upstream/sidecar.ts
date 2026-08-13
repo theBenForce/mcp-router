@@ -93,12 +93,32 @@ export function getDefaultSidecarImage(command?: string): string {
 
 export class SidecarManager {
   private docker: Docker;
-  private socketPath: string;
+  private socketPath?: string;
+  private host?: string;
+  private port?: number;
   private activeContainers: Map<string, Docker.Container> = new Map();
 
-  constructor(socketPath: string = "/var/run/docker.sock") {
-    this.docker = new Docker({ socketPath });
-    this.socketPath = socketPath;
+  constructor(customPath?: string) {
+    const dockerHost = process.env.DOCKER_HOST;
+    if (
+      dockerHost &&
+      (dockerHost.startsWith("tcp://") ||
+        dockerHost.startsWith("http://") ||
+        dockerHost.startsWith("https://"))
+    ) {
+      try {
+        const url = new URL(dockerHost.replace(/^tcp:\/\//, "http://"));
+        this.host = url.hostname;
+        this.port = url.port ? parseInt(url.port, 10) : 2375;
+        this.docker = new Docker({ host: this.host, port: this.port });
+      } catch {
+        this.socketPath = customPath || "/var/run/docker.sock";
+        this.docker = new Docker({ socketPath: this.socketPath });
+      }
+    } else {
+      this.socketPath = customPath || dockerHost || "/var/run/docker.sock";
+      this.docker = new Docker({ socketPath: this.socketPath });
+    }
   }
 
   /**
@@ -111,10 +131,14 @@ export class SidecarManager {
     serverId?: string
   ): Promise<{ socket: net.Socket; readable: Readable; writable: Writable }> {
     return new Promise((resolve, reject) => {
-      const socket = net.createConnection(this.socketPath);
+      const socket =
+        this.host && this.port
+          ? net.createConnection({ host: this.host, port: this.port })
+          : net.createConnection(this.socketPath || "/var/run/docker.sock");
+
       const reqStr =
         `POST /containers/${containerId}/attach?stream=1&stdin=1&stdout=1&stderr=1 HTTP/1.1\r\n` +
-        `Host: localhost\r\n` +
+        `Host: ${this.host || "localhost"}\r\n` +
         `Content-Type: application/vnd.docker.raw-stream\r\n` +
         `Upgrade: tcp\r\n` +
         `Connection: Upgrade\r\n\r\n`;

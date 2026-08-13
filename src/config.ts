@@ -72,7 +72,42 @@ function loadSavedPort(): number {
   return parseInt(process.env.PORT || "5170", 10);
 }
 
-export function saveAppConfig(updates: { port?: number; host?: string }): AppConfig {
+function getOrGenerateSessionSecret(): string {
+  if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.trim().length > 0) {
+    return process.env.SESSION_SECRET;
+  }
+  try {
+    if (fs.existsSync(configFilePath)) {
+      const data = JSON.parse(fs.readFileSync(configFilePath, "utf-8"));
+      if (data.sessionSecret && typeof data.sessionSecret === "string" && data.sessionSecret.trim().length > 0) {
+        return data.sessionSecret;
+      }
+    }
+  } catch {}
+
+  const generated =
+    crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
+  try {
+    const dir = path.dirname(configFilePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    let existing: Record<string, unknown> = {};
+    if (fs.existsSync(configFilePath)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(configFilePath, "utf-8"));
+      } catch {}
+    }
+    fs.writeFileSync(
+      configFilePath,
+      JSON.stringify({ ...existing, sessionSecret: generated }, null, 2),
+      "utf-8"
+    );
+  } catch {}
+  return generated;
+}
+
+export function saveAppConfig(updates: { port?: number; host?: string; sessionSecret?: string }): AppConfig {
   try {
     const dir = path.dirname(configFilePath);
     if (!fs.existsSync(dir)) {
@@ -95,6 +130,9 @@ export function saveAppConfig(updates: { port?: number; host?: string }): AppCon
     if (updates.host) {
       config.host = updates.host;
     }
+    if (updates.sessionSecret) {
+      config.sessionSecret = updates.sessionSecret;
+    }
   } catch (err: any) {
     console.error("[Config] Failed to save config:", err.message);
   }
@@ -109,8 +147,11 @@ export const config: AppConfig = {
     (process.env.NODE_ENV === "test" ? ":memory:" : path.join(dataDir, "mcp_router.db")),
   publicDir: process.env.PUBLIC_DIR || path.join(process.cwd(), "public"),
   isDev: process.env.NODE_ENV !== "production",
-  authMode: (process.env.AUTH_MODE as "docker" | "desktop") || "desktop",
-  sessionSecret: process.env.SESSION_SECRET || "mcp_router_default_session_secret_32_chars_long",
+  authMode:
+    (process.env.AUTH_MODE as "docker" | "desktop") ||
+    (process.env.NODE_ENV === "production" ? "docker" : "desktop"),
+  sessionSecret: getOrGenerateSessionSecret(),
   adminPassword: process.env.ADMIN_PASSWORD,
 };
+
 

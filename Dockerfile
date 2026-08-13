@@ -39,6 +39,9 @@ USER mcp
 
 EXPOSE 5170
 
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:5170/health || exit 1
+
 ENV PORT=5170
 ENV HOST=0.0.0.0
 ENV AUTH_MODE=docker

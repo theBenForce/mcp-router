@@ -16,6 +16,7 @@ describe("JWT Auth Endpoints & Middleware", () => {
   });
 
   afterEach(() => {
+    delete process.env.AUTH_MODE;
     closeDb();
   });
 

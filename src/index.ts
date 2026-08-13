@@ -21,9 +21,55 @@ import { upstreamManager } from "./mcp/upstream/manager";
 
 const app = new Hono();
 
-// Global Middleware
-app.use("*", logger());
-app.use("*", cors());
+const parseAllowedOrigins = (): string[] => {
+  const envOrigins = process.env.ALLOWED_ORIGINS;
+  return envOrigins ? envOrigins.split(",").map((o) => o.trim()).filter(Boolean) : [];
+};
+
+const isLocalOrigin = (origin: string): boolean => {
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname;
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      url.protocol === "tauri:" ||
+      url.protocol === "app:" ||
+      url.protocol === "vscode-webview:"
+    );
+  } catch {
+    return false;
+  }
+};
+
+app.use(
+  "*",
+  cors({
+    origin: (origin) => {
+      if (!origin) return origin;
+
+      const allowedOrigins = parseAllowedOrigins();
+      if (allowedOrigins.length > 0) {
+        if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+          return origin;
+        }
+        return null;
+      }
+
+      const effectiveAuthMode = process.env.AUTH_MODE || config.authMode;
+      if (effectiveAuthMode === "desktop" || config.isDev) {
+        if (isLocalOrigin(origin)) return origin;
+      }
+
+      return null;
+    },
+    credentials: true,
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowHeaders: ["Content-Type", "Authorization", "X-MCP-API-Key", "X-Requested-With"],
+    exposeHeaders: ["Content-Length", "X-MCP-Version"],
+  })
+);
 
 // Healthcheck Endpoint
 app.get("/health", (c) => {
