@@ -23,4 +23,24 @@ describe("Database initialization", () => {
     expect(tableNames).toContain("api_key_permissions");
     expect(tableNames).toContain("audit_logs");
   });
+
+  test("should enforce foreign keys pragma after schema initialization", () => {
+    getDb();
+    const rawDb = getRawDb();
+    const fkStatus = rawDb.query("PRAGMA foreign_keys").get() as { foreign_keys: number };
+    expect(fkStatus.foreign_keys).toBe(1);
+  });
+
+  test("mcp_servers table contains all metadata columns", () => {
+    getDb();
+    const rawDb = getRawDb();
+    const columns = rawDb.query("PRAGMA table_info(mcp_servers)").all() as { name: string }[];
+    const colNames = columns.map((c) => c.name);
+
+    expect(colNames).toContain("server_version");
+    expect(colNames).toContain("server_title");
+    expect(colNames).toContain("instructions");
+    expect(colNames).toContain("website_url");
+    expect(colNames).toContain("icons_json");
+  });
 });
