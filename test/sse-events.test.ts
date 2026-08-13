@@ -111,6 +111,9 @@ describe("SSE Real-Time Events API (/api/servers/events)", () => {
 
     const res = await app.fetch(new Request("http://localhost/api/servers/events"));
     const reader = res.body!.getReader();
+    // Read initial chunk or connect event to ensure stream handler initializes
+    reader.read();
+    await new Promise((r) => setTimeout(r, 10));
 
     expect(serverEvents.listenerCount("server_status")).toBe(initialStatusListeners + 1);
     expect(serverEvents.listenerCount("server_log")).toBe(initialLogListeners + 1);
