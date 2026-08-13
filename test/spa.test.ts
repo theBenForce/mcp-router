@@ -13,4 +13,11 @@ describe("Static SPA Serving", () => {
     const text = await res.text();
     expect(text).toContain("<title>MCP Router");
   });
+
+  test("GET /app-icon.svg returns 200 OK with SVG content", async () => {
+    const res = await app.fetch(new Request("http://localhost/app-icon.svg"));
+    expect(res.status).toBe(200);
+    const contentType = res.headers.get("Content-Type");
+    expect(contentType).toContain("image/svg+xml");
+  });
 });

@@ -55,7 +55,7 @@ const staticDir = fs.existsSync(config.publicDir)
   : path.join(process.cwd(), "src", "web", "dist");
 
 if (fs.existsSync(staticDir)) {
-  app.use("/assets/*", serveStatic({ root: path.relative(process.cwd(), staticDir) }));
+  app.use("*", serveStatic({ root: path.relative(process.cwd(), staticDir) }));
   app.get("*", serveStatic({ path: path.relative(process.cwd(), path.join(staticDir, "index.html")) }));
 }
 
