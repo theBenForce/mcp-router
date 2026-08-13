@@ -6,6 +6,9 @@ import { config } from "../src/config";
 import { ensureAdminUserOnStartup } from "../src/services/auth.service";
 
 describe("Unified API Client Adapters", () => {
+  const origAuthModeEnv = process.env.AUTH_MODE;
+  const origAuthModeConfig = config.authMode;
+
   beforeEach(async () => {
     process.env.DATABASE_PATH = ":memory:";
     process.env.AUTH_MODE = "docker";
@@ -17,6 +20,12 @@ describe("Unified API Client Adapters", () => {
   });
 
   afterEach(() => {
+    if (origAuthModeEnv !== undefined) {
+      process.env.AUTH_MODE = origAuthModeEnv;
+    } else {
+      delete process.env.AUTH_MODE;
+    }
+    config.authMode = origAuthModeConfig;
     closeDb();
   });
 

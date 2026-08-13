@@ -1,10 +1,28 @@
-import { describe, expect, test, afterAll } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach, afterAll } from "bun:test";
 import app from "../src/index";
 import { closeDb } from "../src/db";
 import { serverEvents } from "../src/mcp/upstream/events";
 import { serverLogStore } from "../src/mcp/upstream/logger";
+import { config } from "../src/config";
 
 describe("SSE Real-Time Events API (/api/servers/events)", () => {
+  const origAuthModeEnv = process.env.AUTH_MODE;
+  const origAuthModeConfig = config.authMode;
+
+  beforeEach(() => {
+    delete process.env.AUTH_MODE;
+    config.authMode = "desktop";
+  });
+
+  afterEach(() => {
+    if (origAuthModeEnv !== undefined) {
+      process.env.AUTH_MODE = origAuthModeEnv;
+    } else {
+      delete process.env.AUTH_MODE;
+    }
+    config.authMode = origAuthModeConfig;
+  });
+
   afterAll(() => {
     closeDb();
   });
@@ -19,6 +37,7 @@ describe("SSE Real-Time Events API (/api/servers/events)", () => {
 
   test("receives server_status event on status broadcast", async () => {
     const res = await app.fetch(new Request("http://localhost/api/servers/events"));
+    expect(res.status).toBe(200);
     const reader = res.body!.getReader();
 
     const testServerId = crypto.randomUUID();
@@ -29,7 +48,7 @@ describe("SSE Real-Time Events API (/api/servers/events)", () => {
     let receivedStatus = false;
     const decoder = new TextDecoder();
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 20; i++) {
       const { value, done } = await reader.read();
       if (done) break;
       const text = decoder.decode(value);
@@ -45,6 +64,7 @@ describe("SSE Real-Time Events API (/api/servers/events)", () => {
 
   test("receives server_log event on log store entry addition", async () => {
     const res = await app.fetch(new Request("http://localhost/api/servers/events"));
+    expect(res.status).toBe(200);
     const reader = res.body!.getReader();
 
     const testServerId = crypto.randomUUID();
@@ -57,7 +77,7 @@ describe("SSE Real-Time Events API (/api/servers/events)", () => {
     let receivedLog = false;
     const decoder = new TextDecoder();
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 20; i++) {
       const { value, done } = await reader.read();
       if (done) break;
       const text = decoder.decode(value);
@@ -78,6 +98,7 @@ describe("SSE Real-Time Events API (/api/servers/events)", () => {
     const res = await app.fetch(
       new Request(`http://localhost/api/servers/events?serverId=${targetServerId}`)
     );
+    expect(res.status).toBe(200);
     const reader = res.body!.getReader();
 
     setTimeout(() => {
@@ -89,7 +110,7 @@ describe("SSE Real-Time Events API (/api/servers/events)", () => {
     let receivedOtherStatus = false;
     const decoder = new TextDecoder();
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 20; i++) {
       const { value, done } = await reader.read();
       if (done) break;
       const text = decoder.decode(value);
@@ -110,6 +131,7 @@ describe("SSE Real-Time Events API (/api/servers/events)", () => {
     const initialLogListeners = serverEvents.listenerCount("server_log");
 
     const res = await app.fetch(new Request("http://localhost/api/servers/events"));
+    expect(res.status).toBe(200);
     const reader = res.body!.getReader();
     // Read initial chunk or connect event to ensure stream handler initializes
     reader.read();
