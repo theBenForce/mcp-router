@@ -82,7 +82,7 @@ jobs:
       - name: Build Desktop App
         env:
           APPLE_SIGNING_IDENTITY: "${{ secrets.APPLE_SIGNING_IDENTITY || 'Apple Development: benforce@gmail.com (4NJVFBXFZV)' }}"
-        run: bun run build:desktop
+        run: bun x turbo run build:desktop --filter=mcp-router
 
       - name: Upload DMG to Release
         env:
