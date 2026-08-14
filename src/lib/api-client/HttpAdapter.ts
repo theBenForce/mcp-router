@@ -14,9 +14,13 @@ export class HttpAdapter implements BackendAdapter {
     this.token = token;
   }
 
+  protected getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   protected async request<T>(path: string, options?: RequestInit): Promise<T> {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-    const url = `${this.baseUrl}${normalizedPath}`;
+    const url = `${this.getBaseUrl()}${normalizedPath}`;
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

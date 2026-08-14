@@ -5,12 +5,16 @@ use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 
 static ACTIVE_BACKEND_PORT: AtomicU16 = AtomicU16::new(5170);
-
-struct SidecarState(Mutex<Option<CommandChild>>);
+static LAST_BACKEND_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
 #[tauri::command]
 fn get_backend_port() -> u16 {
     ACTIVE_BACKEND_PORT.load(Ordering::Relaxed)
+}
+
+#[tauri::command]
+fn get_backend_error() -> Option<String> {
+    LAST_BACKEND_ERROR.lock().ok().and_then(|g| g.clone())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,7 +25,7 @@ pub fn run() {
 
     builder
         .manage(SidecarState(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![get_backend_port])
+        .invoke_handler(tauri::generate_handler![get_backend_port, get_backend_error])
         .setup(|app| {
             println!("[Tauri] Setting up MCP Router Desktop Shell...");
 
@@ -49,10 +53,21 @@ pub fn run() {
                                                         }
                                                     }
                                                 }
+                                                if text.contains("[Server Startup Error]") || text.contains("already in use") {
+                                                    if let Ok(mut guard) = LAST_BACKEND_ERROR.lock() {
+                                                        *guard = Some(text.trim().to_string());
+                                                    }
+                                                }
                                                 println!("[Backend Stdout] {}", text.trim_end());
                                             }
                                             tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
-                                                eprintln!("[Backend Stderr] {}", String::from_utf8_lossy(&line).trim_end());
+                                                let text = String::from_utf8_lossy(&line);
+                                                if text.contains("[Server Startup Error]") || text.contains("already in use") || text.contains("EADDRINUSE") {
+                                                    if let Ok(mut guard) = LAST_BACKEND_ERROR.lock() {
+                                                        *guard = Some(text.trim().to_string());
+                                                    }
+                                                }
+                                                eprintln!("[Backend Stderr] {}", text.trim_end());
                                             }
                                             _ => {}
                                         }
@@ -60,12 +75,20 @@ pub fn run() {
                                 });
                             }
                             Err(err) => {
-                                eprintln!("[Tauri] Failed to spawn Bun backend sidecar: {}", err);
+                                let err_msg = format!("Failed to spawn Bun backend sidecar: {}", err);
+                                eprintln!("[Tauri] {}", err_msg);
+                                if let Ok(mut guard) = LAST_BACKEND_ERROR.lock() {
+                                    *guard = Some(err_msg);
+                                }
                             }
                         }
                     }
                     Err(err) => {
-                        eprintln!("[Tauri] Failed to configure Bun backend sidecar command: {}", err);
+                        let err_msg = format!("Failed to configure Bun backend sidecar command: {}", err);
+                        eprintln!("[Tauri] {}", err_msg);
+                        if let Ok(mut guard) = LAST_BACKEND_ERROR.lock() {
+                            *guard = Some(err_msg);
+                        }
                     }
                 }
             }

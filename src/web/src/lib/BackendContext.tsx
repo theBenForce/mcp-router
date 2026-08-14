@@ -8,8 +8,10 @@ interface BackendContextType {
   isAuthenticated: boolean;
   user: User | null;
   isLoading: boolean;
+  connectionError: string | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  retryConnection: () => Promise<void>;
 }
 
 const BackendContext = createContext<BackendContextType | null>(null);
@@ -41,16 +43,30 @@ export function BackendProvider({
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const checkAuth = async () => {
     setIsLoading(true);
+    setConnectionError(null);
     try {
       const status: AuthStatus = await adapter.checkAuth();
       setIsAuthenticated(status.isAuthenticated);
       setUser(status.user || null);
-    } catch {
+    } catch (err: any) {
       setIsAuthenticated(false);
       setUser(null);
+
+      // Check if Tauri captured a specific startup error from the backend sidecar
+      let errorMsg = err.message || "Failed to connect to MCP Router backend.";
+      if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__?.invoke) {
+        try {
+          const tauriErr = await (window as any).__TAURI_INTERNALS__.invoke("get_backend_error");
+          if (tauriErr && typeof tauriErr === "string") {
+            errorMsg = tauriErr;
+          }
+        } catch {}
+      }
+      setConnectionError(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -72,8 +88,23 @@ export function BackendProvider({
     setUser(null);
   };
 
+  const retryConnection = async () => {
+    await checkAuth();
+  };
+
   return (
-    <BackendContext.Provider value={{ adapter, isAuthenticated, user, isLoading, login, logout }}>
+    <BackendContext.Provider
+      value={{
+        adapter,
+        isAuthenticated,
+        user,
+        isLoading,
+        connectionError,
+        login,
+        logout,
+        retryConnection,
+      }}
+    >
       {children}
     </BackendContext.Provider>
   );

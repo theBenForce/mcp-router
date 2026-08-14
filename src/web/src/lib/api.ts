@@ -15,7 +15,8 @@ export function getApiUrl(path: string): string {
 
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   if (isTauri && (normalizedPath.startsWith("/api") || normalizedPath.startsWith("/health"))) {
-    return `http://localhost:5170${normalizedPath}`;
+    const port = (window as any).__ACTIVE_BACKEND_PORT__ || 5170;
+    return `http://localhost:${port}${normalizedPath}`;
   }
   return normalizedPath;
 }

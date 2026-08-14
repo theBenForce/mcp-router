@@ -158,28 +158,26 @@ const shutdown = async () => {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
-function startServer(preferredPort: number, maxAttempts = 10) {
-  let currentPort = preferredPort;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const server = Bun.serve({
-        port: currentPort,
-        hostname: config.host,
-        fetch: app.fetch,
-      });
-      console.log(`🚀 MCP Router starting on ${config.host}:${server.port}`);
-      config.port = server.port;
-      return server;
-    } catch (err: any) {
-      if (err?.code === "EADDRINUSE" || err?.message?.includes("EADDRINUSE")) {
-        console.warn(`[Server] Port ${currentPort} in use, trying ${currentPort + 1}...`);
-        currentPort++;
-      } else {
-        throw err;
-      }
+function startServer(port: number = config.port) {
+  try {
+    const server = Bun.serve({
+      port,
+      hostname: config.host,
+      fetch: app.fetch,
+    });
+    console.log(`🚀 MCP Router starting on ${config.host}:${server.port}`);
+    return server;
+  } catch (err: any) {
+    if (err?.code === "EADDRINUSE" || err?.message?.includes("EADDRINUSE")) {
+      console.error(
+        `\n❌ [Server Startup Error] Port ${port} is already in use by another process.\n` +
+        `   Please stop the process using port ${port} or update the configured port in your settings/config.json.\n`
+      );
+    } else {
+      console.error(`\n❌ [Server Startup Error] Failed to bind to ${config.host}:${port}:`, err?.message || err, "\n");
     }
+    process.exit(1);
   }
-  throw new Error(`Failed to bind to any port starting from ${preferredPort}`);
 }
 
 if (import.meta.main) {
