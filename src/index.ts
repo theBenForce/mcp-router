@@ -14,6 +14,7 @@ import promptsController from "./api/prompts.controller";
 import oauthController from "./api/oauth.controller";
 import configController from "./api/config.controller";
 import authController from "./api/auth.controller";
+import registryController from "./api/registry.controller";
 import { authMiddleware } from "./middleware/auth";
 import { ensureAdminUserOnStartup } from "./services/auth.service";
 import downstreamHandler from "./mcp/downstream/handler";
@@ -91,6 +92,7 @@ app.route("/api/audit", auditController);
 app.route("/api/prompts", promptsController);
 app.route("/api/oauth", oauthController);
 app.route("/api/config", configController);
+app.route("/api/registry", registryController);
 
 // Downstream MCP Proxy Transports (SSE & Streamable HTTP)
 app.route("/", downstreamHandler);

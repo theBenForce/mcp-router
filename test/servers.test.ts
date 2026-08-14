@@ -181,6 +181,39 @@ describe("Servers & Tools API", () => {
     expect(fetched.icons_json).toBe('[{"src":"icon.png"}]');
   });
 
+  test("POST /api/servers accepts and persists initial metadata fields", async () => {
+    const serverName = `initial-meta-server-${crypto.randomUUID().slice(0, 8)}`;
+    const payload = {
+      name: serverName,
+      description: "A server from registry",
+      serverTitle: "Official Registry Server",
+      serverVersion: "2.4.0",
+      websiteUrl: "https://mcp.example.com",
+      iconsJson: JSON.stringify([{ src: "https://example.com/icon.svg" }]),
+      instructions: "Instructions for client",
+      transportType: "streamable-http",
+      config: { url: "https://mcp.example.com/mcp" },
+      authType: "none",
+    };
+
+    const res = await app.fetch(
+      new Request("http://localhost/api/servers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    );
+
+    expect(res.status).toBe(201);
+    const created = await res.json();
+    expect(created.name).toBe(serverName);
+    expect(created.server_title).toBe("Official Registry Server");
+    expect(created.server_version).toBe("2.4.0");
+    expect(created.website_url).toBe("https://mcp.example.com");
+    expect(created.icons_json).toBe(JSON.stringify([{ src: "https://example.com/icon.svg" }]));
+    expect(created.instructions).toBe("Instructions for client");
+  });
+
   test("stdio transport type accepts and persists environment variables", async () => {
     const serverName = `stdio-env-server-${crypto.randomUUID().slice(0, 8)}`;
     const payload = {
