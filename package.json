@@ -3,6 +3,7 @@
   "version": "1.0.1",
   "description": "Local MCP Router & Proxy Gateway in TypeScript with Bun and SQLite",
   "private": true,
+  "packageManager": "bun@1.3.14",
   "workspaces": [
     ".",
     "src/web",
@@ -16,14 +17,15 @@
     "start": "bun src/index.ts",
     "test": "DATABASE_PATH=:memory: bun test",
     "build:web": "cd src/web && bun run build",
-    "build": "bun build:web",
+    "build:backend": "bun scripts/build-backend.ts",
+    "build:desktop": "tauri build",
+    "build": "turbo run build:desktop",
     "db:generate": "bun --bun drizzle-kit generate",
     "db:migrate": "bun --bun drizzle-kit migrate",
     "db:studio": "bun --bun drizzle-kit studio",
     "dev:all": "bun --watch src/index.ts & cd src/web && bun run dev",
     "tauri": "tauri",
     "dev:desktop": "bun scripts/build-backend.ts && tauri dev",
-    "build:desktop": "bun run build:web && bun scripts/build-backend.ts && tauri build",
     "sync-version": "bun scripts/sync-version.ts"
   },
   "dependencies": {

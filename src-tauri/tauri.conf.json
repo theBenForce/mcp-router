@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "bun run dev:all",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "cd src/web && bun run build",
+    "beforeBuildCommand": "",
     "frontendDist": "../src/web/dist"
   },
   "app": {
@@ -29,7 +29,7 @@
     "active": true,
     "targets": "all",
     "macOS": {
-      "signingIdentity": "Apple Development: benforce@gmail.com (4NJVFBXFZV)"
+      "signingIdentity": "-"
     },
     "externalBin": [
       "bin/backend"
