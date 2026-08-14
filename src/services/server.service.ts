@@ -3,6 +3,7 @@ import { getDb } from "../db";
 import { mcpServers, mcpTools } from "../db/schema";
 import { upstreamManager } from "../mcp/upstream/manager";
 import { serverLogStore } from "../mcp/upstream/logger";
+import { getAugmentedEnv, resolveExecutable } from "../mcp/upstream/host";
 
 export interface CreateServerInput {
   name: string;
@@ -270,15 +271,18 @@ export class ServerService {
       throw new Error(`Invalid CLI Auth Command configured for server "${server.name}"`);
     }
 
+    const env = getAugmentedEnv((config.env as Record<string, string>) || {});
+    const resolvedExecutable = resolveExecutable(executable, env);
+
     return new Promise<{ success: boolean; exitCode: number; output: string; error?: string }>((resolve) => {
-      console.log(`[ServerService] Running auth command for ${server.name} (${id}): ${executable} ${args.join(" ")}`);
+      console.log(`[ServerService] Running auth command for ${server.name} (${id}): ${resolvedExecutable} ${args.join(" ")}`);
 
       const stdoutChunks: string[] = [];
       const stderrChunks: string[] = [];
 
-      const child = spawn(executable, args, {
+      const child = spawn(resolvedExecutable, args, {
         timeout: 60000,
-        env: { ...process.env, ...(config.env || {}) },
+        env,
       });
 
       child.stdout?.on("data", (data) => stdoutChunks.push(data.toString()));

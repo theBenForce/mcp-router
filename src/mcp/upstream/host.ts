@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import path from "node:path";
 import os from "node:os";
@@ -31,89 +31,231 @@ export function _resetShellPathCacheForTest(): void {
   inFlightLoginShellPromise = null;
 }
 
+export function clearLoginShellPathCache(): void {
+  _resetShellPathCacheForTest();
+}
+
 /**
- * Common directories where Node.js, Python, uv, uvx, Bun, Pyenv, Cargo, and Homebrew binaries reside.
+ * Gets the user's default shell path.
  */
-export function getStaticFallbackPaths(): string[] {
+export function getDefaultShell(): string {
+  if (process.platform === "win32") {
+    return process.env.COMSPEC || "cmd.exe";
+  }
+  return process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/sh");
+}
+
+function getSubdirectories(baseDir: string): string[] {
+  try {
+    if (!fs.existsSync(baseDir)) return [];
+    return fs
+      .readdirSync(baseDir, { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => dirent.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Discovers common and toolchain-specific search paths across macOS, Linux, and Windows.
+ */
+export function getCommonSearchPaths(): string[] {
   const home = os.homedir();
-  const paths = [
+  const paths: string[] = [];
+
+  // Homebrew & MacPorts (macOS / Linux)
+  paths.push(
     "/opt/homebrew/bin",
     "/opt/homebrew/sbin",
     "/usr/local/bin",
     "/usr/local/sbin",
+    "/opt/local/bin",
+    "/opt/local/sbin"
+  );
+
+  // Standard System Paths
+  paths.push(
     "/usr/bin",
     "/bin",
     "/usr/sbin",
-    "/sbin",
+    "/sbin"
+  );
+
+  // Nix Paths
+  paths.push(
+    path.join(home, ".nix-profile", "bin"),
+    "/nix/var/nix/profiles/default/bin",
+    "/run/current-system/sw/bin"
+  );
+
+  // Mise / rtx paths
+  paths.push(
+    path.join(home, ".local", "share", "mise", "shims"),
+    path.join(home, ".local", "share", "mise", "bin"),
+    path.join(home, ".config", "mise", "shims")
+  );
+
+  // Dynamic Mise tool installations (node, bun, python, uv, etc.)
+  const miseInstallsNode = path.join(home, ".local", "share", "mise", "installs", "node");
+  for (const version of getSubdirectories(miseInstallsNode).reverse()) {
+    paths.push(path.join(miseInstallsNode, version, "bin"));
+  }
+  const miseInstallsBun = path.join(home, ".local", "share", "mise", "installs", "bun");
+  for (const version of getSubdirectories(miseInstallsBun).reverse()) {
+    paths.push(path.join(miseInstallsBun, version, "bin"));
+  }
+  const miseInstallsPython = path.join(home, ".local", "share", "mise", "installs", "python");
+  for (const version of getSubdirectories(miseInstallsPython).reverse()) {
+    paths.push(path.join(miseInstallsPython, version, "bin"));
+  }
+  const miseInstallsUv = path.join(home, ".local", "share", "mise", "installs", "uv");
+  for (const version of getSubdirectories(miseInstallsUv).reverse()) {
+    paths.push(path.join(miseInstallsUv, version, "bin"));
+  }
+
+  // FNM (Fast Node Manager)
+  paths.push(
+    path.join(home, "Library", "Application Support", "fnm", "current", "bin"),
+    path.join(home, ".local", "share", "fnm", "current", "bin"),
+    path.join(home, ".fnm", "current", "bin")
+  );
+  const fnmVersionsMac = path.join(home, "Library", "Application Support", "fnm", "node-versions");
+  for (const version of getSubdirectories(fnmVersionsMac).reverse()) {
+    paths.push(path.join(fnmVersionsMac, version, "installation", "bin"));
+  }
+  const fnmVersionsLinux = path.join(home, ".local", "share", "fnm", "node-versions");
+  for (const version of getSubdirectories(fnmVersionsLinux).reverse()) {
+    paths.push(path.join(fnmVersionsLinux, version, "installation", "bin"));
+  }
+
+  // NVM (Node Version Manager)
+  paths.push(path.join(home, ".nvm", "versions", "node", "current", "bin"));
+  const nvmVersionsDir = path.join(home, ".nvm", "versions", "node");
+  for (const version of getSubdirectories(nvmVersionsDir).reverse()) {
+    paths.push(path.join(nvmVersionsDir, version, "bin"));
+  }
+
+  // ASDF
+  paths.push(
+    path.join(home, ".asdf", "shims"),
+    path.join(home, ".asdf", "bin")
+  );
+  const asdfNodeDir = path.join(home, ".asdf", "installs", "nodejs");
+  for (const version of getSubdirectories(asdfNodeDir).reverse()) {
+    paths.push(path.join(asdfNodeDir, version, "bin"));
+  }
+
+  // Volta, Pyenv, Rye
+  paths.push(
+    path.join(home, ".volta", "bin"),
+    path.join(home, ".pyenv", "shims"),
+    path.join(home, ".pyenv", "bin"),
+    path.join(home, ".rye", "shims"),
+    path.join(home, ".rye", "bin")
+  );
+
+  // Bun & Cargo & Local Binaries & Astral/uv
+  paths.push(
+    path.join(home, ".bun", "bin"),
     path.join(home, ".cargo", "bin"),
     path.join(home, ".local", "bin"),
     path.join(home, ".astral", "bin"),
     path.join(home, ".local", "share", "uv", "bin"),
-    path.join(home, ".uv", "bin"),
-    path.join(home, ".pyenv", "shims"),
-    path.join(home, ".pyenv", "bin"),
-    path.join(home, ".rye", "shims"),
-    path.join(home, ".volta", "bin"),
-    path.join(home, ".npm-global", "bin"),
-    path.join(home, ".bun", "bin"),
-    path.join(home, ".nvm", "versions", "node", "current", "bin"),
-    path.join(home, "Library", "Python", "3.13", "bin"),
+    path.join(home, ".uv", "bin")
+  );
+
+  // macOS Python framework/user paths
+  paths.push(
     path.join(home, "Library", "Python", "3.12", "bin"),
     path.join(home, "Library", "Python", "3.11", "bin"),
-    path.join(home, "Library", "Python", "3.10", "bin"),
-    path.join(home, "Library", "Python", "3.9", "bin"),
-    path.join(home, "Library", "Python", "3.8", "bin"),
-  ];
+    path.join(home, "Library", "Python", "3.10", "bin")
+  );
+  const pythonMacUser = path.join(home, "Library", "Python");
+  for (const pyVer of getSubdirectories(pythonMacUser).reverse()) {
+    paths.push(path.join(pythonMacUser, pyVer, "bin"));
+  }
 
+  // PNPM & Yarn & Pkgx
+  paths.push(
+    path.join(home, "Library", "pnpm"),
+    path.join(home, ".local", "share", "pnpm"),
+    path.join(home, ".pnpm"),
+    path.join(home, ".yarn", "bin"),
+    path.join(home, ".config", "yarn", "global", "node_modules", ".bin"),
+    path.join(home, ".pkgx", "bin")
+  );
+
+  // Go
+  paths.push(
+    path.join(home, "go", "bin"),
+    "/usr/local/go/bin"
+  );
+
+  // Containers & Desktop tools
+  paths.push(
+    path.join(home, ".orbstack", "bin"),
+    path.join(home, ".docker", "bin"),
+    "/Applications/Docker.app/Contents/Resources/bin"
+  );
+
+  // Windows specific paths
   if (process.platform === "win32") {
+    const appData = process.env.APPDATA || path.join(home, "AppData", "Roaming");
+    const localAppData = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
+    const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+    const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+
     paths.push(
-      path.join(home, "AppData", "Local", "uv", "bin"),
-      path.join(home, "AppData", "Local", "Programs", "Python", "Python312", "Scripts"),
-      path.join(home, "AppData", "Roaming", "Python", "Python312", "Scripts")
+      path.join(appData, "npm"),
+      path.join(localAppData, "Programs", "node"),
+      path.join(localAppData, "fnm", "current"),
+      path.join(localAppData, "pnpm"),
+      path.join(localAppData, "Microsoft", "WinGet", "Links"),
+      path.join(programFiles, "nodejs"),
+      path.join(programFilesX86, "nodejs")
     );
   }
 
   return paths;
 }
 
-/**
- * Determines the default interactive login shell to execute.
- */
-function getDefaultShell(): string {
-  if (process.platform === "win32") return "";
-  if (process.env.SHELL && fs.existsSync(process.env.SHELL)) {
-    return process.env.SHELL;
-  }
-  if (process.platform === "darwin") {
-    if (fs.existsSync("/bin/zsh")) return "/bin/zsh";
-    if (fs.existsSync("/bin/bash")) return "/bin/bash";
-  }
-  if (fs.existsSync("/bin/bash")) return "/bin/bash";
-  return "/bin/sh";
+export function getStaticFallbackPaths(): string[] {
+  return getCommonSearchPaths();
 }
 
 /**
- * Combines multiple PATH strings or arrays into a single deduplicated PATH string.
+ * Synchronously extracts PATH from user's login shell on macOS / Linux.
  */
-export function combinePaths(sources: (string | undefined | null)[]): string {
-  const segments: string[] = [];
-  for (const src of sources) {
-    if (!src) continue;
-    for (const part of src.split(path.delimiter)) {
-      const trimmed = part.trim();
-      if (trimmed && !segments.includes(trimmed)) {
-        segments.push(trimmed);
-      }
-    }
+export function getLoginShellPath(): string {
+  if (cachedLoginShellPath !== null) {
+    return cachedLoginShellPath;
   }
-  return segments.join(path.delimiter);
+
+  if (process.platform === "win32") {
+    cachedLoginShellPath = process.env.PATH || process.env.Path || "";
+    return cachedLoginShellPath;
+  }
+
+  try {
+    const shell = getDefaultShell();
+    const output = execFileSync(shell, ["-l", "-c", "printf '%s' \"$PATH\""], {
+      encoding: "utf-8",
+      timeout: 2000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    cachedLoginShellPath = (output || "").trim();
+  } catch {
+    cachedLoginShellPath = "";
+  }
+
+  return cachedLoginShellPath;
 }
 
 /**
- * Dynamically resolves the user's interactive login shell PATH (e.g. from .zshrc, .bashrc).
- * Uses single-flight Promise memoization to deduplicate concurrent calls.
+ * Asynchronously extracts PATH from user's login shell on macOS / Linux.
  */
-export async function resolveLoginShellPath(timeoutMs = 1500): Promise<string | null> {
+export async function resolveLoginShellPath(timeoutMs = 2000): Promise<string | null> {
   if (process.platform === "win32") {
     return process.env.PATH || process.env.Path || null;
   }
@@ -132,10 +274,7 @@ export async function resolveLoginShellPath(timeoutMs = 1500): Promise<string | 
       let settled = false;
       let outputBuffer = "";
 
-      // Run env command in login interactive mode (-l -i -c) to source rc files
-      const shellArgs = shell.endsWith("sh") || shell.endsWith("bash") || shell.endsWith("zsh") || shell.endsWith("fish")
-        ? ["-l", "-i", "-c", "/usr/bin/env || printenv || env"]
-        : ["-l", "-c", "env"];
+      const shellArgs = ["-l", "-c", "printf '%s' \"$PATH\""];
 
       let proc: ChildProcess;
       try {
@@ -185,9 +324,8 @@ export async function resolveLoginShellPath(timeoutMs = 1500): Promise<string | 
         if (!settled) {
           settled = true;
           clearTimeout(timer);
-          const match = outputBuffer.match(/^PATH=(.+)$/m);
-          if (match && match[1]?.trim()) {
-            const resolved = match[1].trim();
+          const resolved = outputBuffer.trim();
+          if (resolved) {
             cachedLoginShellPath = resolved;
             resolve(resolved);
             return;
@@ -204,21 +342,49 @@ export async function resolveLoginShellPath(timeoutMs = 1500): Promise<string | 
 }
 
 /**
- * Augments process.env.PATH with cached login shell PATH and common fallback directories.
+ * Combines an array of path strings or arrays into a deduplicated PATH string.
+ */
+export function combinePaths(sources: (string | null | undefined | string[])[]): string {
+  const seen = new Set<string>();
+  const validPaths: string[] = [];
+
+  for (const source of sources) {
+    if (!source) continue;
+    const parts = Array.isArray(source) ? source : source.split(path.delimiter);
+    for (const p of parts) {
+      if (!p) continue;
+      const normalized = path.normalize(p.trim());
+      if (normalized && !seen.has(normalized)) {
+        seen.add(normalized);
+        validPaths.push(normalized);
+      }
+    }
+  }
+
+  return validPaths.join(path.delimiter);
+}
+
+/**
+ * Augments process.env.PATH with common execution paths on macOS/Linux GUI environments
+ * and version manager locations (Homebrew, Mise, FNM, NVM, Volta, ASDF, Bun, Cargo, Pipx, PNPM).
  */
 export function getAugmentedEnv(customEnv?: Record<string, string>): Record<string, string> {
-  const commonFallback = getStaticFallbackPaths().join(path.delimiter);
+  const commonPaths = getCommonSearchPaths();
+  const loginShellPath = cachedLoginShellPath || getLoginShellPath();
+  const existingPath = process.env.PATH || process.env.Path || "";
+  const customPath = customEnv?.PATH || customEnv?.Path || "";
+
   const combinedPath = combinePaths([
-    customEnv?.PATH || customEnv?.Path,
-    cachedLoginShellPath,
-    process.env.PATH || process.env.Path,
-    commonFallback,
+    customPath,
+    loginShellPath,
+    commonPaths,
+    existingPath,
   ]);
 
   return {
     ...process.env,
-    PATH: combinedPath,
     ...customEnv,
+    PATH: combinedPath,
   };
 }
 
@@ -232,6 +398,60 @@ export async function getAugmentedEnvAsync(
   return getAugmentedEnv(customEnv);
 }
 
+/**
+ * Checks whether a given file path exists and is executable.
+ */
+export function isExecutable(filePath: string): boolean {
+  try {
+    const stats = fs.statSync(filePath);
+    if (!stats.isFile()) return false;
+    if (process.platform === "win32") {
+      return true;
+    }
+    // On Unix, check if executable bit is set
+    return (stats.mode & 0o111) !== 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolves a command (e.g. 'npx', 'node', 'uv') to its absolute path by searching the augmented PATH.
+ */
+export function resolveExecutable(command: string, env?: Record<string, string>): string {
+  if (!command || typeof command !== "string") {
+    return command;
+  }
+
+  const trimmed = command.trim();
+  if (!trimmed) return trimmed;
+
+  // If already an absolute path or relative path containing separators
+  if (trimmed.includes(path.sep) || (process.platform === "win32" && trimmed.includes("/"))) {
+    if (path.isAbsolute(trimmed)) {
+      if (isExecutable(trimmed)) return trimmed;
+    }
+    return trimmed;
+  }
+
+  const effectiveEnv = env || getAugmentedEnv();
+  const searchPath = effectiveEnv.PATH || "";
+  const searchDirs = searchPath.split(path.delimiter).filter(Boolean);
+
+  const extensions = process.platform === "win32" ? ["", ".cmd", ".bat", ".exe", ".ps1"] : [""];
+
+  for (const dir of searchDirs) {
+    for (const ext of extensions) {
+      const candidate = path.join(dir, `${trimmed}${ext}`);
+      if (isExecutable(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return trimmed;
+}
+
 export class HostProcessManager {
   private activeProcesses: Map<string, ChildProcess> = new Map();
 
@@ -239,15 +459,16 @@ export class HostProcessManager {
     serverId: string,
     config: HostProcessConfig
   ): Promise<HostProcessConnection> {
-    const command = config.command;
-    if (!command) {
+    const rawCommand = config.command;
+    if (!rawCommand) {
       throw new Error("Command must be specified for host process execution");
     }
 
     const args = config.args || [];
     const env = await getAugmentedEnvAsync(config.env);
+    const command = resolveExecutable(rawCommand, env);
 
-    const spawnMsg = `Spawning host process: ${command} ${args.join(" ")}`;
+    const spawnMsg = `Spawning host process: ${command} ${args.join(" ")}${command !== rawCommand ? ` (resolved from '${rawCommand}')` : ""}`;
     console.log(`[HostProcessManager] ${spawnMsg} for ${serverId}`);
     serverLogStore.addLog(serverId, "info", `[HostProcess] ${spawnMsg}`);
 
@@ -268,8 +489,8 @@ export class HostProcessManager {
       // Trapping spawn errors (e.g. ENOENT command not found) immediately
       proc.on("error", (err: any) => {
         let msg = err.message || String(err);
-        if (err.code === "ENOENT") {
-          msg = `Host command '${command}' not found on PATH. Please ensure '${command}' (Node.js/uv/Bun) is installed or switch execution mode to Docker sidecar.`;
+        if (err.code === "ENOENT" || msg.includes("Executable not found in $PATH") || msg.includes("not found")) {
+          msg = `Host command '${rawCommand}' not found on PATH. Please ensure '${rawCommand}' (Node.js/uv/Bun) is installed or switch execution mode to Docker sidecar.`;
         }
         console.error(`[HostProcessManager] Spawn error for ${serverId}:`, msg);
         serverLogStore.addLog(serverId, "error", `[HostProcess Error] ${msg}`);
@@ -281,7 +502,7 @@ export class HostProcessManager {
       });
 
       if (!proc.stdout || !proc.stdin) {
-        const err = new Error(`Failed to initialize stdio pipes for host process: ${command}`);
+        const err = new Error(`Failed to initialize stdio pipes for host process: ${rawCommand}`);
         serverLogStore.addLog(serverId, "error", `[HostProcess Error] ${err.message}`);
         this.activeProcesses.delete(serverId);
         if (!isSettled) {
@@ -328,7 +549,7 @@ export class HostProcessManager {
               proc.kill("SIGTERM");
             }
           }
-        } catch (err) {
+        } catch {
           // Process might have exited already
         } finally {
           this.activeProcesses.delete(serverId);
@@ -342,16 +563,18 @@ export class HostProcessManager {
         this.activeProcesses.delete(serverId);
       });
 
-      if (!isSettled) {
-        isSettled = true;
-        resolve({
-          process: proc,
-          readable: proc.stdout,
-          writable: proc.stdin,
-          getStderr: () => stderrBuffer.join("\n"),
-          stop,
-        });
-      }
+      proc.on("spawn", () => {
+        if (!isSettled) {
+          isSettled = true;
+          resolve({
+            process: proc,
+            readable: proc.stdout!,
+            writable: proc.stdin!,
+            getStderr: () => stderrBuffer.join("\n"),
+            stop,
+          });
+        }
+      });
     });
   }
 
