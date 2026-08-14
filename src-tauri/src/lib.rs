@@ -2,10 +2,13 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Mutex;
 use tauri::Manager;
 use tauri_plugin_shell::process::CommandChild;
+#[cfg(not(debug_assertions))]
 use tauri_plugin_shell::ShellExt;
 
 static ACTIVE_BACKEND_PORT: AtomicU16 = AtomicU16::new(5170);
 static LAST_BACKEND_ERROR: Mutex<Option<String>> = Mutex::new(None);
+
+struct SidecarState(pub Mutex<Option<CommandChild>>);
 
 #[tauri::command]
 fn get_backend_port() -> u16 {
@@ -26,17 +29,17 @@ pub fn run() {
     builder
         .manage(SidecarState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![get_backend_port, get_backend_error])
-        .setup(|app| {
+        .setup(|_app| {
             println!("[Tauri] Setting up MCP Router Desktop Shell...");
 
             #[cfg(not(debug_assertions))]
             {
-                match app.shell().sidecar("backend") {
+                match _app.shell().sidecar("backend") {
                     Ok(command) => {
                         match command.spawn() {
                             Ok((mut rx, child)) => {
                                 println!("[Tauri] Successfully spawned Bun backend sidecar process.");
-                                if let Ok(mut guard) = app.state::<SidecarState>().0.lock() {
+                                if let Ok(mut guard) = _app.state::<SidecarState>().0.lock() {
                                     *guard = Some(child);
                                 }
 
