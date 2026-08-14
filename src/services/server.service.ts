@@ -7,7 +7,13 @@ import { serverLogStore } from "../mcp/upstream/logger";
 export interface CreateServerInput {
   name: string;
   description?: string;
+  serverVersion?: string;
+  serverTitle?: string;
+  instructions?: string;
+  websiteUrl?: string;
+  iconsJson?: string;
   transportType: "stdio" | "docker" | "sse" | "streamable-http";
+  executorType?: "host" | "docker";
   config: Record<string, unknown>;
   authType?: "none" | "api_key" | "bearer" | "oauth2" | "cli_command";
   authData?: Record<string, unknown>;
@@ -16,7 +22,13 @@ export interface CreateServerInput {
 export interface UpdateServerInput {
   name?: string;
   description?: string;
+  serverVersion?: string;
+  serverTitle?: string;
+  instructions?: string;
+  websiteUrl?: string;
+  iconsJson?: string;
   transportType?: "stdio" | "docker" | "sse" | "streamable-http";
+  executorType?: "host" | "docker";
   config?: Record<string, unknown>;
   authType?: "none" | "api_key" | "bearer" | "oauth2" | "cli_command";
   authData?: Record<string, unknown>;
@@ -134,6 +146,11 @@ export class ServerService {
         id,
         name: input.name,
         description: input.description || "",
+        serverVersion: input.serverVersion || null,
+        serverTitle: input.serverTitle || null,
+        instructions: input.instructions || null,
+        websiteUrl: input.websiteUrl || null,
+        iconsJson: input.iconsJson || null,
         transportType: input.transportType,
         configJson,
         authType,
@@ -158,6 +175,11 @@ export class ServerService {
 
     const name = input.name ?? existing.name;
     const description = input.description ?? existing.description;
+    const serverVersion = input.serverVersion !== undefined ? input.serverVersion : existing.server_version;
+    const serverTitle = input.serverTitle !== undefined ? input.serverTitle : existing.server_title;
+    const instructions = input.instructions !== undefined ? input.instructions : existing.instructions;
+    const websiteUrl = input.websiteUrl !== undefined ? input.websiteUrl : existing.website_url;
+    const iconsJson = input.iconsJson !== undefined ? input.iconsJson : existing.icons_json;
     const transportType = input.transportType ?? existing.transport_type;
     const updatedConfig = input.config ? {
       ...input.config,
@@ -174,6 +196,11 @@ export class ServerService {
       .set({
         name,
         description,
+        serverVersion,
+        serverTitle,
+        instructions,
+        websiteUrl,
+        iconsJson,
         transportType,
         configJson,
         authType,
