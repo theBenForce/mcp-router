@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Sparkles } from "lucide-react";
 import { AddServerModal } from "../components/AddServerModal";
 import { ServerModal } from "../components/ServerModal";
+import { RegistryModal } from "../components/RegistryModal";
 import { AuthModal } from "../components/AuthModal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { ServerLogsModal } from "../components/ServerLogsModal";
@@ -17,6 +18,7 @@ export const ServersPage: React.FC = () => {
   const [servers, setServers] = useState<ServerItem[]>([]);
   const [selectedServer, setSelectedServer] = useState<ServerItem | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isRegistryModalOpen, setIsRegistryModalOpen] = useState(false);
   const [editingServer, setEditingServer] = useState<ServerItem | null>(null);
   const [authModalServer, setAuthModalServer] = useState<ServerItem | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -234,7 +236,17 @@ export const ServersPage: React.FC = () => {
       <TwoPaneLayout
         title="MCP Servers"
         description="Manage upstream stdio sidecars, remote SSE, and Streamable HTTP OAuth endpoints"
-        actionLabel="Add MCP Server"
+        headerActions={
+          <Button
+            variant="outline"
+            onClick={() => setIsRegistryModalOpen(true)}
+            className="bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border-indigo-500/30 gap-2 shadow-xs"
+          >
+            <Sparkles className="h-4 w-4 text-indigo-400" />
+            <span>Explore Registry</span>
+          </Button>
+        }
+        actionLabel="Add Custom Server"
         onActionClick={() => setIsAddModalOpen(true)}
         banner={
           authError ? (
@@ -279,6 +291,8 @@ export const ServersPage: React.FC = () => {
               e.stopPropagation();
               setEditingServer(server);
             }}
+            onExploreRegistry={() => setIsRegistryModalOpen(true)}
+            onAddServer={() => setIsAddModalOpen(true)}
           />
         }
         rightContent={
@@ -302,6 +316,22 @@ export const ServersPage: React.FC = () => {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSuccess={loadServers}
+      />
+
+      {/* Registry Explorer Modal */}
+      <RegistryModal
+        isOpen={isRegistryModalOpen}
+        onClose={() => setIsRegistryModalOpen(false)}
+        onSuccess={(newServer) => {
+          loadServers();
+          if (newServer?.id) {
+            setSelectedServer(newServer);
+            loadServerDetails(newServer.id);
+          }
+        }}
+        onOpenCustomEditor={(prefilledData) => {
+          setEditingServer(prefilledData);
+        }}
       />
 
       <ServerModal

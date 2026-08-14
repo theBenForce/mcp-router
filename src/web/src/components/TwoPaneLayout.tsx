@@ -9,6 +9,7 @@ interface TwoPaneLayoutProps {
   actionLabel?: string;
   onActionClick?: () => void;
   actionIcon?: ReactNode;
+  headerActions?: ReactNode;
   banner?: ReactNode;
 
   // Left Column
@@ -25,6 +26,7 @@ export const TwoPaneLayout: React.FC<TwoPaneLayoutProps> = ({
   actionLabel,
   onActionClick,
   actionIcon = <Plus className="h-4 w-4" />,
+  headerActions,
   banner,
   leftHeader,
   leftContent,
@@ -33,20 +35,23 @@ export const TwoPaneLayout: React.FC<TwoPaneLayoutProps> = ({
   return (
     <div className="flex flex-col h-full space-y-6 min-h-0 overflow-hidden">
       {/* Top Page Header */}
-      <div className="flex items-center justify-between shrink-0">
+      <div className="flex items-center justify-between shrink-0 gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-100">{title}</h1>
           <p className="text-sm text-zinc-400">{description}</p>
         </div>
-        {actionLabel && onActionClick && (
-          <Button
-            onClick={onActionClick}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 shadow-lg shadow-indigo-600/20"
-          >
-            {actionIcon}
-            <span>{actionLabel}</span>
-          </Button>
-        )}
+        <div className="flex items-center gap-2.5">
+          {headerActions}
+          {actionLabel && onActionClick && (
+            <Button
+              onClick={onActionClick}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 shadow-lg shadow-indigo-600/20"
+            >
+              {actionIcon}
+              <span>{actionLabel}</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Optional Top Banner / Alert */}

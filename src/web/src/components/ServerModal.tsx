@@ -473,6 +473,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim(),
+          serverTitle: server?.serverTitle || server?.server_title || undefined,
+          serverVersion: server?.serverVersion || server?.server_version || undefined,
+          websiteUrl: server?.websiteUrl || server?.website_url || undefined,
+          iconsJson: server?.iconsJson || server?.icons_json || undefined,
+          instructions: server?.instructions || undefined,
           transportType,
           executorType: transportType === "stdio" ? executorType : (transportType === "docker" ? "docker" : "host"),
           config,
