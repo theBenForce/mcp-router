@@ -274,3 +274,4 @@ Detailed decision records are located in [docs/decisions/](docs/decisions/):
 ## 📄 License
 
 MIT © 2026
+
