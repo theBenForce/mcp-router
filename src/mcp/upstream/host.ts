@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import path from "node:path";
 import os from "node:os";
+import fs from "node:fs";
 import { serverLogStore } from "./logger";
 
 export interface HostProcessConfig {
@@ -19,13 +20,23 @@ export interface HostProcessConnection {
   stop: () => Promise<void>;
 }
 
+let cachedLoginShellPath: string | null = null;
+let inFlightLoginShellPromise: Promise<string | null> | null = null;
+
 /**
- * Augments process.env.PATH with common execution paths on macOS/Linux GUI environments
- * where terminal environment variables (Homebrew, Cargo, NVM, Pipx, Bun) are omitted.
+ * Resets the in-memory shell path cache (for unit testing isolation).
  */
-export function getAugmentedEnv(customEnv?: Record<string, string>): Record<string, string> {
+export function _resetShellPathCacheForTest(): void {
+  cachedLoginShellPath = null;
+  inFlightLoginShellPromise = null;
+}
+
+/**
+ * Common directories where Node.js, Python, uv, uvx, Bun, Pyenv, Cargo, and Homebrew binaries reside.
+ */
+export function getStaticFallbackPaths(): string[] {
   const home = os.homedir();
-  const commonPaths = [
+  const paths = [
     "/opt/homebrew/bin",
     "/opt/homebrew/sbin",
     "/usr/local/bin",
@@ -36,20 +47,189 @@ export function getAugmentedEnv(customEnv?: Record<string, string>): Record<stri
     "/sbin",
     path.join(home, ".cargo", "bin"),
     path.join(home, ".local", "bin"),
+    path.join(home, ".astral", "bin"),
+    path.join(home, ".local", "share", "uv", "bin"),
+    path.join(home, ".uv", "bin"),
+    path.join(home, ".pyenv", "shims"),
+    path.join(home, ".pyenv", "bin"),
+    path.join(home, ".rye", "shims"),
+    path.join(home, ".volta", "bin"),
+    path.join(home, ".npm-global", "bin"),
     path.join(home, ".bun", "bin"),
     path.join(home, ".nvm", "versions", "node", "current", "bin"),
+    path.join(home, "Library", "Python", "3.13", "bin"),
+    path.join(home, "Library", "Python", "3.12", "bin"),
+    path.join(home, "Library", "Python", "3.11", "bin"),
+    path.join(home, "Library", "Python", "3.10", "bin"),
+    path.join(home, "Library", "Python", "3.9", "bin"),
+    path.join(home, "Library", "Python", "3.8", "bin"),
   ];
 
-  const existingPath = process.env.PATH || "";
-  const combinedPath = Array.from(
-    new Set([...commonPaths, ...existingPath.split(path.delimiter).filter(Boolean)])
-  ).join(path.delimiter);
+  if (process.platform === "win32") {
+    paths.push(
+      path.join(home, "AppData", "Local", "uv", "bin"),
+      path.join(home, "AppData", "Local", "Programs", "Python", "Python312", "Scripts"),
+      path.join(home, "AppData", "Roaming", "Python", "Python312", "Scripts")
+    );
+  }
+
+  return paths;
+}
+
+/**
+ * Determines the default interactive login shell to execute.
+ */
+function getDefaultShell(): string {
+  if (process.platform === "win32") return "";
+  if (process.env.SHELL && fs.existsSync(process.env.SHELL)) {
+    return process.env.SHELL;
+  }
+  if (process.platform === "darwin") {
+    if (fs.existsSync("/bin/zsh")) return "/bin/zsh";
+    if (fs.existsSync("/bin/bash")) return "/bin/bash";
+  }
+  if (fs.existsSync("/bin/bash")) return "/bin/bash";
+  return "/bin/sh";
+}
+
+/**
+ * Combines multiple PATH strings or arrays into a single deduplicated PATH string.
+ */
+export function combinePaths(sources: (string | undefined | null)[]): string {
+  const segments: string[] = [];
+  for (const src of sources) {
+    if (!src) continue;
+    for (const part of src.split(path.delimiter)) {
+      const trimmed = part.trim();
+      if (trimmed && !segments.includes(trimmed)) {
+        segments.push(trimmed);
+      }
+    }
+  }
+  return segments.join(path.delimiter);
+}
+
+/**
+ * Dynamically resolves the user's interactive login shell PATH (e.g. from .zshrc, .bashrc).
+ * Uses single-flight Promise memoization to deduplicate concurrent calls.
+ */
+export async function resolveLoginShellPath(timeoutMs = 1500): Promise<string | null> {
+  if (process.platform === "win32") {
+    return process.env.PATH || process.env.Path || null;
+  }
+  if (cachedLoginShellPath !== null) {
+    return cachedLoginShellPath;
+  }
+  if (inFlightLoginShellPromise) {
+    return inFlightLoginShellPromise;
+  }
+
+  inFlightLoginShellPromise = (async () => {
+    const shell = getDefaultShell();
+    if (!shell) return null;
+
+    return new Promise<string | null>((resolve) => {
+      let settled = false;
+      let outputBuffer = "";
+
+      // Run env command in login interactive mode (-l -i -c) to source rc files
+      const shellArgs = shell.endsWith("sh") || shell.endsWith("bash") || shell.endsWith("zsh") || shell.endsWith("fish")
+        ? ["-l", "-i", "-c", "/usr/bin/env || printenv || env"]
+        : ["-l", "-c", "env"];
+
+      let proc: ChildProcess;
+      try {
+        proc = spawn(shell, shellArgs, {
+          stdio: ["ignore", "pipe", "ignore"],
+          detached: process.platform !== "win32",
+          env: {
+            ...process.env,
+            CI: "1",
+            TERM: "dumb",
+            PAGER: "cat",
+            GIT_TERMINAL_PROMPT: "0",
+          },
+        });
+      } catch {
+        resolve(null);
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          try {
+            if (proc.pid && process.platform !== "win32") {
+              process.kill(-proc.pid, "SIGKILL");
+            } else if (proc.pid) {
+              proc.kill("SIGKILL");
+            }
+          } catch {}
+          resolve(null);
+        }
+      }, timeoutMs);
+
+      proc.stdout?.on("data", (chunk: Buffer) => {
+        outputBuffer += chunk.toString("utf8");
+      });
+
+      proc.on("error", () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(null);
+        }
+      });
+
+      proc.on("close", () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          const match = outputBuffer.match(/^PATH=(.+)$/m);
+          if (match && match[1]?.trim()) {
+            const resolved = match[1].trim();
+            cachedLoginShellPath = resolved;
+            resolve(resolved);
+            return;
+          }
+          resolve(null);
+        }
+      });
+    });
+  })().finally(() => {
+    inFlightLoginShellPromise = null;
+  });
+
+  return inFlightLoginShellPromise;
+}
+
+/**
+ * Augments process.env.PATH with cached login shell PATH and common fallback directories.
+ */
+export function getAugmentedEnv(customEnv?: Record<string, string>): Record<string, string> {
+  const commonFallback = getStaticFallbackPaths().join(path.delimiter);
+  const combinedPath = combinePaths([
+    customEnv?.PATH || customEnv?.Path,
+    cachedLoginShellPath,
+    process.env.PATH || process.env.Path,
+    commonFallback,
+  ]);
 
   return {
     ...process.env,
     PATH: combinedPath,
     ...customEnv,
   };
+}
+
+/**
+ * Dynamically resolves the user's login shell PATH asynchronously, then returns the augmented environment.
+ */
+export async function getAugmentedEnvAsync(
+  customEnv?: Record<string, string>
+): Promise<Record<string, string>> {
+  await resolveLoginShellPath();
+  return getAugmentedEnv(customEnv);
 }
 
 export class HostProcessManager {
@@ -65,7 +245,7 @@ export class HostProcessManager {
     }
 
     const args = config.args || [];
-    const env = getAugmentedEnv(config.env);
+    const env = await getAugmentedEnvAsync(config.env);
 
     const spawnMsg = `Spawning host process: ${command} ${args.join(" ")}`;
     console.log(`[HostProcessManager] ${spawnMsg} for ${serverId}`);
