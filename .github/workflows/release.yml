@@ -182,7 +182,7 @@ jobs:
       - name: Build Desktop App (macOS Apple Silicon DMG)
         env:
           APPLE_SIGNING_IDENTITY: "${{ secrets.APPLE_SIGNING_IDENTITY || 'Apple Development: benforce@gmail.com (4NJVFBXFZV)' }}"
-        run: bun run build:desktop
+        run: bun x turbo run build:desktop --filter=mcp-router
 
       - name: Verify DMG asset exists
         run: ls -la src-tauri/target/release/bundle/dmg/*.dmg || ls -la src-tauri/target/**/bundle/dmg/*.dmg

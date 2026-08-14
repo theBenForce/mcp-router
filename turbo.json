@@ -2,13 +2,24 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "build:web": {
-      "outputs": ["src/web/dist/**"]
+      "inputs": ["src/web/**", "!src/web/dist/**", "bun.lock"],
+      "outputs": ["src/web/dist/**", "dist/**"]
     },
     "build:backend": {
+      "inputs": ["src/**", "!src/web/**", "scripts/build-backend.ts", "package.json", "tsconfig.json", "bun.lock"],
       "outputs": ["src-tauri/bin/**"]
     },
     "build:desktop": {
       "dependsOn": ["build:web", "build:backend"],
+      "env": [
+        "APPLE_SIGNING_IDENTITY",
+        "APPLE_ID",
+        "APPLE_PASSWORD",
+        "APPLE_TEAM_ID",
+        "APPLE_API_KEY",
+        "APPLE_API_ISSUER",
+        "APPLE_API_KEY_PATH"
+      ],
       "outputs": ["src-tauri/target/release/bundle/**"]
     },
     "build": {
