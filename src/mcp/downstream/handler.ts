@@ -163,6 +163,7 @@ async function handleJsonRpc(apiKey: any, body: any, targetServerId?: string) {
       const originalToolName = params?.name;
       const args = params?.arguments || {};
       const startTime = Date.now();
+      const paramsJson = args ? JSON.stringify(args) : null;
 
       try {
         const { serverId, originalToolName: validatedName } =
@@ -177,6 +178,8 @@ async function handleJsonRpc(apiKey: any, body: any, targetServerId?: string) {
           toolName: originalToolName,
           status: "success",
           durationMs,
+          parametersJson: paramsJson,
+          responseJson: result ? JSON.stringify(result) : null,
         });
 
         return { jsonrpc: "2.0", id, result };
@@ -186,10 +189,12 @@ async function handleJsonRpc(apiKey: any, body: any, targetServerId?: string) {
 
         auditService.logToolCall({
           apiKeyId: apiKey.id,
+          serverId: targetServerId,
           toolName: originalToolName || "unknown",
           status: isPermissionDenied ? "denied" : "error",
           durationMs,
           errorMessage: err.message,
+          parametersJson: paramsJson,
         });
 
         return {
@@ -244,12 +249,15 @@ async function handleJsonRpc(apiKey: any, body: any, targetServerId?: string) {
     const namespacedName = params?.name;
     const args = params?.arguments || {};
     const startTime = Date.now();
+    const paramsJson = args ? JSON.stringify(args) : null;
+    let resolvedServerId: string | undefined = undefined;
 
     try {
       const { serverId, originalToolName } = filterEngine.authorizeToolCall(
         apiKey.id,
         namespacedName
       );
+      resolvedServerId = serverId;
 
       const result = await upstreamManager.callTool(serverId, originalToolName, args);
       const durationMs = Date.now() - startTime;
@@ -260,6 +268,8 @@ async function handleJsonRpc(apiKey: any, body: any, targetServerId?: string) {
         toolName: namespacedName,
         status: "success",
         durationMs,
+        parametersJson: paramsJson,
+        responseJson: result ? JSON.stringify(result) : null,
       });
 
       return { jsonrpc: "2.0", id, result };
@@ -269,10 +279,12 @@ async function handleJsonRpc(apiKey: any, body: any, targetServerId?: string) {
 
       auditService.logToolCall({
         apiKeyId: apiKey.id,
+        serverId: resolvedServerId,
         toolName: namespacedName || "unknown",
         status: isPermissionDenied ? "denied" : "error",
         durationMs,
         errorMessage: err.message,
+        parametersJson: paramsJson,
       });
 
       return {

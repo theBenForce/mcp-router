@@ -80,8 +80,24 @@ export class HttpAdapter implements BackendAdapter {
     return this.request<PromptDefinition[]>("/prompts");
   }
 
-  async getLogs(limit = 100): Promise<AuditLogEntry[]> {
-    return this.request<AuditLogEntry[]>(`/audit?limit=${limit}`);
+  async getLogs(filters?: import("./types").AuditLogFilters | number): Promise<AuditLogEntry[]> {
+    if (typeof filters === "number") {
+      return this.request<AuditLogEntry[]>(`/audit?limit=${filters}`);
+    }
+    const params = new URLSearchParams();
+    if (filters?.limit) params.set("limit", filters.limit.toString());
+    if (filters?.offset) params.set("offset", filters.offset.toString());
+    if (filters?.apiKeyId) params.set("apiKeyId", filters.apiKeyId);
+    if (filters?.serverId) params.set("serverId", filters.serverId);
+    if (filters?.toolName) params.set("toolName", filters.toolName);
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.search) params.set("search", filters.search);
+    const qs = params.toString();
+    return this.request<AuditLogEntry[]>(`/audit${qs ? `?${qs}` : ""}`);
+  }
+
+  async getLogById(id: string): Promise<AuditLogEntry> {
+    return this.request<AuditLogEntry>(`/audit/${id}`);
   }
 
   async login(username: string, password: string): Promise<{ token: string; user: User }> {

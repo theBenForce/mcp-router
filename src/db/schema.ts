@@ -128,9 +128,13 @@ export const auditLogs = sqliteTable("audit_logs", {
   status: text("status", { enum: ["allowed", "denied", "error", "success"] }).notNull(),
   durationMs: integer("duration_ms"),
   errorMessage: text("error_message"),
+  parametersJson: text("parameters_json"),
+  responseJson: text("response_json"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
 }, (table) => [
   index("idx_audit_key").on(table.apiKeyId),
+  index("idx_audit_server").on(table.serverId),
+  index("idx_audit_tool").on(table.toolName),
   index("idx_audit_created").on(table.createdAt),
 ]);
 
