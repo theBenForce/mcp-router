@@ -181,6 +181,8 @@ function pushSchema(db: Database) {
         status TEXT NOT NULL CHECK(status IN ('allowed', 'denied', 'error', 'success')),
         duration_ms INTEGER,
         error_message TEXT,
+        parameters_json TEXT,
+        response_json TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
@@ -191,8 +193,24 @@ function pushSchema(db: Database) {
       CREATE INDEX IF NOT EXISTS idx_perms_server ON api_key_permissions(server_id);
       CREATE INDEX IF NOT EXISTS idx_prompt_args_prompt ON mcp_prompt_arguments(prompt_id);
       CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_logs(api_key_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_server ON audit_logs(server_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_tool ON audit_logs(tool_name);
       CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
     `);
+
+    // Migration: add parameters_json and response_json columns to audit_logs if missing
+    try {
+      db.exec("ALTER TABLE audit_logs ADD COLUMN parameters_json TEXT");
+    } catch {}
+    try {
+      db.exec("ALTER TABLE audit_logs ADD COLUMN response_json TEXT");
+    } catch {}
+    try {
+      db.exec("CREATE INDEX IF NOT EXISTS idx_audit_server ON audit_logs(server_id)");
+    } catch {}
+    try {
+      db.exec("CREATE INDEX IF NOT EXISTS idx_audit_tool ON audit_logs(tool_name)");
+    } catch {}
 
     // Migration: add user_id column to api_keys if missing
     try {
