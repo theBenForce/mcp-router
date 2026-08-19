@@ -59,7 +59,22 @@ export interface AuditLogEntry {
   status: "allowed" | "denied" | "error" | "success";
   duration_ms?: number | null;
   error_message?: string | null;
+  parameters_json?: string | null;
+  response_json?: string | null;
+  api_key_name?: string | null;
+  key_prefix?: string | null;
+  server_name?: string | null;
   created_at: string;
+}
+
+export interface AuditLogFilters {
+  apiKeyId?: string;
+  serverId?: string;
+  toolName?: string;
+  status?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export interface BackendAdapter {
@@ -70,9 +85,11 @@ export interface BackendAdapter {
 
   getTools(): Promise<ToolDefinition[]>;
   getPrompts(): Promise<PromptDefinition[]>;
-  getLogs(limit?: number): Promise<AuditLogEntry[]>;
+  getLogs(filters?: AuditLogFilters | number): Promise<AuditLogEntry[]>;
+  getLogById?(id: string): Promise<AuditLogEntry>;
 
   login(username: string, password: string): Promise<{ token: string; user: User }>;
   logout(): Promise<void>;
   checkAuth(): Promise<AuthStatus>;
 }
+
